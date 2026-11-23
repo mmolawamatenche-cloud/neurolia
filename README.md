@@ -28,6 +28,14 @@ python lia4.py
 ```
 Sign in with any name, or use **voice login** (say your name).
 
+## Public web demo
+
+The Render static site is configured with `render.yaml` and publishes `demo_site/`.
+It is a two-minute-per-visitor interactive preview, not the Windows application:
+commands return sample responses and never access a visitor's microphone, camera,
+screen, accounts, or files. Deploy it by connecting this repository to Render and
+selecting the `render.yaml` Blueprint.
+
 ## Project layout
 - `lia4.py` – main app (GUI, voice listener, camera panel, command execution)
 - `lia_core.py` – shared app matching, command safety/confirmation, gesture stabilization, and OCR lookup

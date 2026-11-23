@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: neurolia-live-demo
+    runtime: static
+    buildCommand: echo "Publishing NeuroLia demo"
+    staticPublishPath: ./demo_site
+    autoDeploy: true

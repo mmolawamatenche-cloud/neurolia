@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090e">
+  <meta name="description" content="Try a two-minute interactive preview of NeuroLia, a hands-free desktop assistant.">
+  <title>NeuroLia — Live Demo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #09090e;
+      --panel: #111118;
+      --card: #18181f;
+      --line: #292936;
+      --text: #f0eeff;
+      --muted: #a09bb8;
+      --purple: #a397ff;
+      --teal: #39d99a;
+      --amber: #ffca72;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(ellipse at 75% -20%, #28204d 0, transparent 48%), var(--bg);
+      color: var(--text);
+      font: 16px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    button, input { font: inherit; }
+    button:focus-visible, input:focus-visible, a:focus-visible {
+      outline: 3px solid var(--amber);
+      outline-offset: 3px;
+    }
+    .wrap { width: min(1120px, calc(100% - 36px)); margin: 0 auto; padding: 28px 0 42px; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 11px; font-size: 19px; font-weight: 750; letter-spacing: -.03em; }
+    .brand-mark {
+      display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid #6259a7;
+      border-radius: 13px; background: #211d3a; color: var(--purple); font-weight: 800;
+    }
+    .live-badge, .session { border: 1px solid var(--line); background: #14141c; border-radius: 999px; padding: 7px 12px; color: var(--muted); font-size: 13px; }
+    .live-badge { color: var(--teal); }
+    .live-badge::before { content: ""; display: inline-block; width: 7px; height: 7px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--teal); box-shadow: 0 0 10px #39d99a88; }
+    .hero { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 22px; padding: 58px 0 26px; }
+    .eyebrow { color: var(--purple); font-size: 12px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; }
+    h1 { margin: 8px 0 10px; font-size: clamp(36px, 6vw, 58px); line-height: 1.03; letter-spacing: -.055em; }
+    .hero p { max-width: 640px; margin: 0; color: var(--muted); font-size: 17px; }
+    .session { min-width: 145px; text-align: center; }
+    .session strong { display: block; color: var(--text); font-size: 23px; font-variant-numeric: tabular-nums; }
+    .session span { font-size: 12px; }
+    .notice { margin: 0 0 18px; border: 1px solid #70582e; border-radius: 12px; background: #211b12; padding: 12px 15px; color: #ffe3b4; font-size: 13px; }
+    .notice strong { color: #fff1d9; }
+    .demo { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); overflow: hidden; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); box-shadow: 0 24px 80px #0005; }
+    .controls { padding: 24px; border-right: 1px solid var(--line); }
+    .section-label { margin: 0 0 13px; color: var(--muted); font-size: 12px; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
+    .prompt-list { display: grid; gap: 9px; }
+    .prompt {
+      display: flex; width: 100%; align-items: center; gap: 12px; border: 1px solid var(--line);
+      border-radius: 11px; background: var(--card); padding: 12px; color: var(--text);
+      text-align: left; cursor: pointer; transition: border-color .16s, transform .16s;
+    }
+    .prompt:hover { border-color: #655ba8; transform: translateY(-1px); }
+    .prompt .icon { display: grid; flex: 0 0 31px; height: 31px; place-items: center; border-radius: 9px; background: #292448; color: var(--purple); }
+    .prompt small { display: block; color: var(--muted); font-size: 12px; }
+    .divider { display: flex; align-items: center; gap: 10px; margin: 19px 0; color: #77738b; font-size: 12px; }
+    .divider::before, .divider::after { height: 1px; flex: 1; background: var(--line); content: ""; }
+    form { display: flex; gap: 8px; }
+    input { min-width: 0; flex: 1; border: 1px solid var(--line); border-radius: 10px; background: #0c0c12; padding: 11px 12px; color: var(--text); }
+    input::placeholder { color: #77738b; }
+    .send { border: 0; border-radius: 10px; background: #7569df; padding: 0 17px; color: white; font-weight: 700; cursor: pointer; }
+    .send:hover { background: #897ff2; }
+    .privacy { margin: 10px 0 0; color: #858198; font-size: 12px; }
+    .screen { min-width: 0; padding: 20px; background: #0e0e14; }
+    .window { min-height: 350px; overflow: hidden; border: 1px solid #343443; border-radius: 13px; background: #17171f; }
+    .window-bar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #343443; background: #20202a; padding: 10px 13px; color: #d7d4e5; font-size: 12px; }
+    .dots { display: flex; gap: 5px; }
+    .dots i { width: 8px; height: 8px; border-radius: 50%; background: #f17d78; }
+    .dots i:nth-child(2) { background: #efc46e; }
+    .dots i:nth-child(3) { background: #57c993; }
+    .screen-content { padding: 22px; }
+    .lia-row { display: flex; gap: 11px; align-items: flex-start; }
+    .avatar { display: grid; flex: 0 0 34px; height: 34px; place-items: center; border: 1px solid #6259a7; border-radius: 50%; background: #292448; color: var(--purple); font-weight: 800; }
+    .bubble { max-width: 95%; border: 1px solid #343443; border-radius: 4px 13px 13px; background: #22222d; padding: 12px 14px; color: #eeeafa; }
+    .placeholder { color: #8e8a9e; }
+    .result { margin: 18px 0 0 45px; border-left: 2px solid #6259a7; padding: 1px 0 2px 14px; color: #c4c0d5; font-size: 14px; }
+    .result strong { display: block; margin-bottom: 4px; color: var(--teal); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
+    .result ul { margin: 8px 0 0; padding-left: 18px; }
+    .status { display: flex; justify-content: space-between; gap: 12px; margin-top: 13px; color: #8d899d; font-size: 12px; }
+    .status span:first-child { color: var(--teal); }
+    .ended { display: none; position: absolute; inset: 0; place-items: center; border-radius: 20px; background: #09090eeF; padding: 24px; text-align: center; }
+    .demo-shell { position: relative; }
+    .ended h2 { margin: 0 0 8px; }
+    .ended p { max-width: 440px; margin: 0; color: var(--muted); }
+    .ended.show { display: grid; }
+    footer { display: flex; justify-content: space-between; gap: 16px; padding-top: 19px; color: #858198; font-size: 12px; }
+    footer a { color: #b7adff; text-decoration: none; }
+    @media (max-width: 760px) {
+      .hero { grid-template-columns: 1fr; padding-top: 40px; }
+      .session { justify-self: start; }
+      .demo { grid-template-columns: 1fr; }
+      .controls { border-right: 0; border-bottom: 1px solid var(--line); }
+      .screen { padding: 13px; }
+      .window { min-height: 300px; }
+      footer { flex-direction: column; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">L</span> NeuroLia</div>
+      <span class="live-badge">Interactive preview</span>
+    </header>
+
+    <section class="hero" aria-labelledby="title">
+      <div>
+        <div class="eyebrow">Hands-free, on your terms</div>
+        <h1 id="title">Meet Lia.<br>Try a command.</h1>
+        <p>Explore how voice-first computer assistance can make everyday desktop tasks more accessible.</p>
+      </div>
+      <div class="session" aria-label="Two minutes remaining">
+        <strong id="timer">2:00</strong>
+        <span>demo time remaining</span>
+      </div>
+    </section>
+
+    <p class="notice"><strong>Demo preview, not the desktop app.</strong> This page simulates Lia’s responses. It does not access your microphone, camera, computer, accounts, or files. Don’t enter private information.</p>
+
+    <div class="demo-shell">
+      <section class="demo" aria-label="Interactive Lia demo">
+        <div class="controls">
+          <h2 class="section-label">Try an example</h2>
+          <div class="prompt-list">
+            <button class="prompt" type="button" data-command="Open Notepad and type hello">
+              <span class="icon" aria-hidden="true">✎</span><span>Open Notepad and type hello<small>Dictate into an app</small></span>
+            </button>
+            <button class="prompt" type="button" data-command="Search for accessible design tools">
+              <span class="icon" aria-hidden="true">⌕</span><span>Search for accessible design tools<small>Find information hands-free</small></span>
+            </button>
+            <button class="prompt" type="button" data-command="Read my screen">
+              <span class="icon" aria-hidden="true">◉</span><span>Read my screen<small>Get a spoken screen summary</small></span>
+            </button>
+          </div>
+          <div class="divider">or type a sample command</div>
+          <form id="command-form">
+            <label for="command" class="section-label" style="position:absolute;left:-10000px">Sample command</label>
+            <input id="command" maxlength="120" autocomplete="off" placeholder="e.g. Open Notepad" aria-label="Type a sample command">
+            <button class="send" type="submit">Try it</button>
+          </form>
+          <p class="privacy">Examples only — nothing is sent to Lia or a third-party AI.</p>
+        </div>
+
+        <div class="screen" aria-live="polite" aria-atomic="false">
+          <div class="window">
+            <div class="window-bar">
+              <span id="window-title">Lia’s preview</span>
+              <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            </div>
+            <div class="screen-content">
+              <div class="lia-row">
+                <span class="avatar" aria-hidden="true">L</span>
+                <div class="bubble" id="response"><span class="placeholder">Choose an example to see a simulated response.</span></div>
+              </div>
+              <div class="result" id="result" hidden></div>
+              <div class="status"><span id="status-text">● Ready</span><span>Preview mode · no device access</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div class="ended" id="ended" role="status" aria-live="assertive">
+        <div><h2>That’s the two-minute demo.</h2><p>Thanks for exploring NeuroLia. You can refresh this page to start another preview.</p></div>
+      </div>
+    </div>
+
+    <footer>
+      <span>NeuroLia — accessibility-focused desktop assistant</span>
+      <a href="https://github.com/mmolawamatenche-cloud/lia" target="_blank" rel="noreferrer">View the project on GitHub ↗</a>
+    </footer>
+  </main>
+  <script>
+    const form = document.querySelector("#command-form");
+    const input = document.querySelector("#command");
+    const response = document.querySelector("#response");
+    const result = document.querySelector("#result");
+    const title = document.querySelector("#window-title");
+    const status = document.querySelector("#status-text");
+    const timer = document.querySelector("#timer");
+    const ended = document.querySelector("#ended");
+    const buttons = [...document.querySelectorAll("[data-command]")];
+    let remaining = 120;
+    let expired = false;
+
+    const scenarios = [
+      {
+        match: /notepad|type|write|dictat/i,
+        say: "Opening Notepad and typing “hello”.",
+        title: "Notepad — simulated",
+        content: "<strong>Example result</strong>A Notepad window opens and Lia types:<br><br><code>hello</code>"
+      },
+      {
+        match: /search|find|look/i,
+        say: "Searching for accessible design tools.",
+        title: "Browser search — simulated",
+        content: "<strong>Example result</strong>Search results would appear in your browser.<ul><li>Accessibility checker</li><li>Inclusive design toolkit</li><li>Keyboard navigation guide</li></ul>"
+      },
+      {
+        match: /read|screen|what.*see/i,
+        say: "The active window is a simulated desktop preview. No real screen is being read.",
+        title: "Screen summary — simulated",
+        content: "<strong>Example result</strong>Lia can describe the active window to support screen-reader users. This preview uses sample text only."
+      },
+      {
+        match: /open|launch|start/i,
+        say: "Opening the requested app — in this preview, the action is simulated.",
+        title: "Desktop action — simulated",
+        content: "<strong>Example result</strong>In the desktop app, Lia can launch supported applications with a voice command."
+      }
+    ];
+
+    function runCommand(command) {
+      if (expired) return;
+      const clean = command.trim().slice(0, 120);
+      if (!clean) {
+        input.focus();
+        return;
+      }
+      const scenario = scenarios.find(item => item.match.test(clean));
+      response.textContent = scenario ? scenario.say : "I heard: “" + clean + "”. Try one of the sample commands to explore this preview.";
+      title.textContent = scenario ? scenario.title : "Lia’s preview";
+      result.hidden = !scenario;
+      result.innerHTML = scenario ? scenario.content : "";
+      status.textContent = "● Preview complete";
+    }
+
+    buttons.forEach(button => button.addEventListener("click", () => {
+      input.value = button.dataset.command;
+      runCommand(button.dataset.command);
+    }));
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      runCommand(input.value);
+    });
+
+    function updateTimer() {
+      const minutes = Math.floor(remaining / 60);
+      const seconds = remaining % 60;
+      timer.textContent = minutes + ":" + String(seconds).padStart(2, "0");
+      timer.parentElement.setAttribute("aria-label", minutes + " minutes " + seconds + " seconds remaining");
+      if (remaining <= 0) {
+        expired = true;
+        timer.textContent = "0:00";
+        ended.classList.add("show");
+        buttons.forEach(button => button.disabled = true);
+        input.disabled = true;
+        form.querySelector("button").disabled = true;
+        status.textContent = "● Demo session ended";
+        clearInterval(clock);
+      }
+      remaining -= 1;
+    }
+    updateTimer();
+    const clock = setInterval(updateTimer, 1000);
+  </script>
+</body>
+</html>
