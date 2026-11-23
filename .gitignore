@@ -1,0 +1,9 @@
+.venv/
+.venv-1/
+venv/
+.vscode/
+__pycache__/
+*.pyc
+users.db
+screenshot.png
+.env

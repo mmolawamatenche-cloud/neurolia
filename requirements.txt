@@ -1,0 +1,17 @@
+SpeechRecognition==3.16.1
+pyttsx3==2.99
+pyaudio==0.2.14
+customtkinter
+openai
+opencv-python
+mediapipe==0.10.11
+Pillow
+pyautogui
+pyperclip
+pytesseract
+psutil
+scikit-learn==1.7.2
+joblib
+numpy
+anthropic
+python-dotenv
