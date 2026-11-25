@@ -30,7 +30,8 @@ Sign in with any name, or use **voice login** (say your name).
 
 ## Public web demo
 
-The Render static site is configured with `render.yaml` and publishes `demo_site/`.
+The Render static site is configured with `render.yaml`, builds from `demo_site/`,
+and publishes its static files without installing the desktop app's Python dependencies.
 It is a two-minute-per-visitor interactive preview, not the Windows application:
 commands return sample responses and never access a visitor's microphone, camera,
 screen, accounts, or files. Deploy it by connecting this repository to Render and

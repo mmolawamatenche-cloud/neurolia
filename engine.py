@@ -41,6 +41,8 @@ VALID_ACTIONS = {
     "converse",
     "agent",
     "sequence",
+    "cursor_on", "cursor_off", "cursor_toggle",
+    "mouse_click", "double_click", "right_click",
     "open_chrome",
     "open_notepad",
     "open_calculator",
@@ -210,6 +212,26 @@ def parse_command(text):
         if re.search(r"\.|(?:facebook|youtube|google|netflix|twitter|x\.com|instagram|amazon|github|wikipedia|gmail)$", target_lower):
             return {"action": "open_website", "query": target}
         return {"action": "open_app", "target": target}
+
+    # cursor mode
+    if re.fullmatch(
+        r"(?:(?:turn on|start|enable|switch on|activate|use) )?(?:the )?"
+        r"(?:cursor|mouse|pointer)(?: mode| control(?:ler)?)?(?: on)?"
+        r"|control (?:the )?(?:cursor|mouse|pointer)(?: with my (?:hand|finger))?", lower):
+        return {"action": "cursor_on", "reply": "Turning on cursor mode."}
+    if re.fullmatch(
+        r"(?:turn off|stop|disable|switch off|exit|end|deactivate) (?:the )?"
+        r"(?:cursor|mouse|pointer)(?: mode| control(?:ler)?)?"
+        r"|(?:cursor|mouse|pointer)(?: mode| control(?:ler)?)? off", lower):
+        return {"action": "cursor_off", "reply": "Turning off cursor mode."}
+
+    # click commands
+    if re.fullmatch(r"(?:left )?click(?: here| that| it)?", lower):
+        return {"action": "mouse_click", "reply": "Clicking."}
+    if re.fullmatch(r"double[ -]?click(?: here| that| it)?", lower):
+        return {"action": "double_click", "reply": "Double-clicking."}
+    if re.fullmatch(r"right[ -]?click(?: here| that| it)?", lower):
+        return {"action": "right_click", "reply": "Right-clicking."}
 
     if re.search(r"^(?:stop|cancel|abort)\b", lower):
         return {"action": "cancel"}

@@ -1,1966 +1,815 @@
-from pathlib import Path
+"""
+NeuroLia Prototype — aligned with lia4.py
+Adds: multilingual commands, head gestures, eye-gaze dwell
+Reuses: speak(), execute(), ask_gpt(), stop_speaking() from lia4 modules
+"""
+
+import customtkinter as ctk
 import tkinter as tk
-from tkinter import filedialog, messagebox
-import argparse
-import tempfile
-import os
-import sys
-import logging
-from logging.handlers import RotatingFileHandler
-from datetime import datetime
-
-
-class NeuroLia(tk.Tk):
-    def __init__(self, out_path: Path, verbose: bool = False):
-        super().__init__()
-        self.out_path = out_path
-        self.verbose = verbose
-        # Default save file (rolling single file)
-        self.save_file_path = self.out_path.parent / "saved_text.txt"
-        self.title("NeuroLia Prototype")
-        self.geometry("600x320")
-        label = tk.Label(self, text="NeuroLia Prototype", font=("Segoe UI", 16))
-        label.pack(pady=10)
-
-        # Small text area for user input
-        self.text = tk.Text(self, height=10, width=70)
-        self.text.pack(padx=10, pady=5)
-
-        btn_frame = tk.Frame(self)
-        btn_frame.pack(pady=8)
-
-        save_btn = tk.Button(btn_frame, text="Save Text", command=self.save_text)
-        save_btn.pack(side=tk.LEFT, padx=6)
-
-        quit_btn = tk.Button(btn_frame, text="Quit", command=self.destroy)
-        quit_btn.pack(side=tk.LEFT, padx=6)
-
-        # Menu to choose save filename
-        menubar = tk.Menu(self)
-        filemenu = tk.Menu(menubar, tearoff=0)
-        filemenu.add_command(label="Choose Save File...", command=self.choose_save_file)
-        filemenu.add_command(label="Show Current Save File", command=self.show_save_file)
-        menubar.add_cascade(label="File", menu=filemenu)
-        self.config(menu=menubar)
-
-    def save_text(self):
-        content = self.text.get("1.0", tk.END).rstrip()
-        # Ensure save directory exists
-        self.save_file_path.parent.mkdir(parents=True, exist_ok=True)
-        # Append content to the single rolling save file
-        with self.save_file_path.open("a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now().isoformat()}]\n")
-            f.write(content)
-            f.write("\n---\n")
-
-        logging.info(f"Saved GUI text to: {self.save_file_path}")
-        if self.verbose:
-            print(f"Saved GUI text to: {self.save_file_path}")
-
-    def choose_save_file(self):
-        path = filedialog.asksaveasfilename(defaultextension=".txt", initialfile=self.save_file_path.name)
-        if path:
-            self.save_file_path = Path(path)
-            logging.info(f"User selected save file: {self.save_file_path}")
-
-    def show_save_file(self):
-        messagebox.showinfo("Current Save File", str(self.save_file_path))
-
-
-def main():
-    parser = argparse.ArgumentParser(description="NeuroLia prototype")
-    parser.add_argument("--no-gui", action="store_true", help="Skip launching the Tk GUI")
-    parser.add_argument("--out", help="Output path for the prototype file")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
-    args = parser.parse_args()
-
-    # Read this file's source
-    src = Path(__file__).read_text(encoding="utf-8")
-
-    # Determine a Windows-friendly default output path if none provided
-    if args.out:
-        out_path = Path(args.out)
-    else:
-        tmp = tempfile.gettempdir()
-        out_path = Path(tmp) / "neurolia_prototype.py"
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Configure rotating file logging
-    log_file = out_path.parent / "neurolia.log"
-    rhandler = RotatingFileHandler(log_file, maxBytes=1_000_000, backupCount=3, encoding="utf-8")
-    rhandler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
-    handlers = [rhandler]
-    if args.verbose:
-        handlers.append(logging.StreamHandler(sys.stdout))
-    logging.basicConfig(level=logging.INFO, handlers=handlers)
-    logging.info("Starting NeuroLia prototype run")
-
-    out_path.write_text(src, encoding="utf-8")
-    out_path.write_text(src, encoding="utf-8")
-    print(f"Prototype lines: {len(src.splitlines())}")
-    logging.info(f"Wrote prototype to: {out_path}")
-
-    if args.no_gui:
-        print("--no-gui specified: skipping GUI launch")
-        logging.info("--no-gui specified: skipping GUI launch")
-        out_path.write_text(src, encoding="utf-8")
-        logging.info("Final write complete (no-gui)")
-        return
-
-    try:
-        app = NeuroLia(out_path, verbose=args.verbose)
-    except tk.TclError as e:
-        print("Tkinter GUI unavailable:", e)
-        logging.error(f"Tkinter GUI unavailable: {e}")
-        out_path.write_text(src, encoding="utf-8")
-        logging.info("Final write complete (no display)")
-        return
-
-    app.mainloop()
-
-    # Final write after the GUI closes (matches the original snippet intent).
-    out_path.write_text(src, encoding="utf-8")
-    logging.info("Final write complete (after GUI exit)")
-
-
-if __name__ == "__main__":
-    main()
-"""
-NeuroLia Accessibility Prototype
---------------------------------
-A Windows-first multimodal accessibility assistant.
-
-Features:
-- Voice commands with wake word "NeuroLia"
-- Voice copy/paste/type/open/search controls
-- Hand gestures:
-    Fist -> volume down
-    Open palm -> volume up
-    Swipe right -> next tab
-    Swipe left -> close tab
-    Hand wave up -> scroll up
-    Hand wave down -> scroll down
-    Thumbs up -> confirm
-    Thumbs down -> cancel
-- Head gestures:
-    Nod -> confirm / click
-    Head shake -> cancel
-    Head left/right -> previous/next
-- Eye gaze:
-    Uses MediaPipe Face Mesh iris landmarks
-    Shows a gaze cursor
-    Long dwell asks for confirmation before clicking
-- Text + voice confirmation
-- Basic South African language profiles for speech recognition
-- Accessible UI: large controls, high contrast, no mouse required for core actions
-
-IMPORTANT:
-This is a prototype, not a medical device. Camera-based gaze/gesture recognition
-can make mistakes. Always require confirmation before important actions.
-
-Install:
-    pip install opencv-python mediapipe pillow pyautogui pyperclip
-    pip install SpeechRecognition PyAudio pyttsx3
-
-Run:
-    python neurolia_prototype.py
-"""
-
-import json
-import math
-import os
-import queue
-import re
-import subprocess
-import threading
-import time
-import webbrowser
+import threading, time, queue, os, re, math
 from collections import deque
-from difflib import get_close_matches
-import tkinter as tk
-from tkinter import ttk, messagebox
 
-# Optional imports
+# ── reuse lia4 core ────────────────────────────────────────────────────────────
+from lia4 import (
+    speak, stop_speaking, execute, ask_gpt,
+    _local_parse, _normalize_action, _safe_print,
+    C, CAM_OK, SR_OK, TTS_OK, GPT_OK,
+    is_failure_message,
+)
+from lia_core import is_allowed, needs_confirmation, confirmation_prompt
+from engine import is_failure
+
 try:
-    import cv2
-    import mediapipe as mp
-    from PIL import Image, ImageTk
-    CAMERA_OK = True
-except Exception:
-    CAMERA_OK = False
+    import cv2, mediapipe as mp
+    from PIL import Image
+    _CAM = True
+except ImportError:
+    _CAM = False
+
+try:
+    import speech_recognition as sr
+    _SR = True
+except ImportError:
+    _SR = False
 
 try:
     import pyautogui
     pyautogui.FAILSAFE = False
-    pyautogui.PAUSE = 0.08
-    GUI_CONTROL_OK = True
-except Exception:
-    GUI_CONTROL_OK = False
+    _GUI = True
+except ImportError:
+    _GUI = False
 
-try:
-    import pyperclip
-    CLIPBOARD_OK = True
-except Exception:
-    CLIPBOARD_OK = False
-
-try:
-    import speech_recognition as sr
-    SPEECH_OK = True
-except Exception:
-    SPEECH_OK = False
-
-try:
-    import pyttsx3
-    TTS_OK = True
-except Exception:
-    TTS_OK = False
-
-
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-APP_NAME = "NeuroLia"
-WAKE_WORDS = ("neurolia", "lia", "leah", "liya")
-
+# ── multilingual command tables ────────────────────────────────────────────────
 LANGUAGES = {
-    "English (South Africa)": "en-ZA",
+    "English": "en-US",
+    "Afrikaans": "af-ZA",
     "isiZulu": "zu-ZA",
     "isiXhosa": "xh-ZA",
     "Sesotho": "st-ZA",
     "Setswana": "tn-ZA",
     "Sepedi": "nso-ZA",
-    "Afrikaans": "af-ZA",
 }
 
-LANGUAGE_COMMANDS = {
-    "English (South Africa)": {
-        "open": ["open", "launch", "start"],
-        "close": ["close", "exit", "shut"],
-        "copy": ["copy", "copy this", "copy that"],
-        "paste": ["paste", "paste this", "paste that"],
-        "select_all": ["select all", "select everything"],
-        "volume_up": ["volume up", "increase volume", "turn volume up", "make it louder"],
-        "volume_down": ["volume down", "decrease volume", "turn volume down", "make it quieter"],
-        "mute": ["mute", "mute volume"],
-        "scroll_up": ["scroll up", "go up"],
+LANG_CMDS = {
+    "English": {
+        "volume_up":   ["volume up", "increase volume", "louder"],
+        "volume_down": ["volume down", "decrease volume", "quieter"],
+        "mute":        ["mute", "silence"],
+        "scroll_up":   ["scroll up", "go up"],
         "scroll_down": ["scroll down", "go down"],
-        "back": ["go back", "back"],
-        "new_tab": ["new tab", "open new tab"],
-        "close_tab": ["close tab"],
-        "search": ["search", "search for", "look for"],
-    },
-    "Setswana": {
-        "open": ["bula", "simolola"],
-        "close": ["tswala", "tswalela"],
-        "copy": ["kopisa", "kopitsa"],
-        "paste": ["kgomaretsa", "manamisa"],
-        "select_all": ["tlhopha tsotlhe"],
-        "volume_up": ["oketsa modumo", "godisa modumo"],
-        "volume_down": ["fokotsa modumo", "fokotsa segalo"],
-        "mute": ["didimatsa", "didimatsa modumo"],
-        "scroll_up": ["tsamaya kwa godimo", "ya kwa godimo"],
-        "scroll_down": ["tsamaya kwa tlase", "ya kwa tlase"],
-        "back": ["boela morago", "morago"],
-        "new_tab": ["bula tab e ntsha", "tab e ntsha"],
-        "close_tab": ["tswala tab"],
-        "search": ["batla", "batla sengwe"],
-    },
-    "Sepedi": {
-        "open": ["bula", "thoma"],
-        "close": ["tswala", "tswalela"],
-        "copy": ["kopolla", "kopisa"],
-        "paste": ["manamisa", "kgomaretša"],
-        "select_all": ["kgetha tšohle"],
-        "volume_up": ["oketša modumo", "godisa modumo"],
-        "volume_down": ["fokotša modumo"],
-        "mute": ["homotša modumo"],
-        "scroll_up": ["ya godimo", "sepela godimo"],
-        "scroll_down": ["ya fase", "sepela fase"],
-        "back": ["boela morago"],
-        "new_tab": ["bula tab ye mpsha"],
-        "close_tab": ["tswala tab"],
-        "search": ["nyaka", "nyaka se"],
-    },
-    "isiZulu": {
-        "open": ["vula", "vula i", "vula le"],
-        "close": ["vala", "vala i", "vala le"],
-        "copy": ["kopisha", "kopisha lokhu"],
-        "paste": ["namathisela", "namathisela lokhu"],
-        "select_all": ["khetha konke"],
-        "volume_up": ["phakamisa ivolumu", "nyusa ivolumu", "yenza umsindo ube phezulu"],
-        "volume_down": ["yehlisa ivolumu", "yehlisa umsindo"],
-        "mute": ["thulisa", "thulisa umsindo"],
-        "scroll_up": ["skrolela phezulu", "hamba phezulu"],
-        "scroll_down": ["skrolela phansi", "hamba phansi"],
-        "back": ["buyela emuva"],
-        "new_tab": ["vula ithebhu entsha"],
-        "close_tab": ["vala ithebhu"],
-        "search": ["sesha", "sesha lokhu", "funa"],
-    },
-    "isiXhosa": {
-        "open": ["vula", "vula i"],
-        "close": ["vala", "vala i"],
-        "copy": ["khuphela", "khuphela oku"],
-        "paste": ["ncamathelisa", "ncamathelisa oku"],
-        "select_all": ["khetha konke"],
-        "volume_up": ["nyusa ivolyum", "nyusa isandi"],
-        "volume_down": ["hlisa ivolyum", "hlisa isandi"],
-        "mute": ["cima isandi"],
-        "scroll_up": ["skrolela phezulu", "yiya phezulu"],
-        "scroll_down": ["skrolela ezantsi", "yiya ezantsi"],
-        "back": ["buyela emva"],
-        "new_tab": ["vula ithebhu entsha"],
-        "close_tab": ["vala ithebhu"],
-        "search": ["khangela", "khangela oku"],
-    },
-    "Sesotho": {
-        "open": ["bula", "qala"],
-        "close": ["kwala", "koala"],
-        "copy": ["kopitsa", "kopitsa sena"],
-        "paste": ["manamisa", "manamisa sena"],
-        "select_all": ["kgetha tsohle"],
-        "volume_up": ["phahamisa modumo", "eketsa modumo"],
-        "volume_down": ["fokotsa modumo"],
-        "mute": ["homotsa"],
-        "scroll_up": ["ya hodimo", "tsamaya hodimo"],
-        "scroll_down": ["ya tlase", "tsamaya tlase"],
-        "back": ["kgutlela morao"],
-        "new_tab": ["bula tab e ntjha"],
-        "close_tab": ["kwala tab"],
-        "search": ["batla", "batla sena"],
+        "new_tab":     ["new tab"],
+        "close_tab":   ["close tab"],
+        "go_back":     ["go back", "back"],
+        "refresh":     ["refresh"],
+        "select_all":  ["select all"],
+        "copy":        ["copy", "copy this"],
+        "paste":       ["paste", "paste that"],
+        "search":      ["search", "search for"],
+        "open":        ["open", "launch", "start"],
     },
     "Afrikaans": {
-        "open": ["open", "maak oop", "begin"],
-        "close": ["sluit", "maak toe"],
-        "copy": ["kopieer", "kopieer dit"],
-        "paste": ["plak", "plak dit"],
-        "select_all": ["kies alles"],
-        "volume_up": ["verhoog die volume", "draai die volume op"],
+        "volume_up":   ["verhoog die volume", "draai die volume op"],
         "volume_down": ["verlaag die volume", "draai die volume af"],
-        "mute": ["demp", "demp die volume"],
-        "scroll_up": ["blaai op", "gaan op"],
+        "mute":        ["demp"],
+        "scroll_up":   ["blaai op", "gaan op"],
         "scroll_down": ["blaai af", "gaan af"],
-        "back": ["gaan terug"],
-        "new_tab": ["maak 'n nuwe oortjie oop", "nuwe oortjie"],
-        "close_tab": ["sluit oortjie"],
-        "search": ["soek", "soek vir"],
+        "new_tab":     ["nuwe oortjie"],
+        "close_tab":   ["sluit oortjie"],
+        "go_back":     ["gaan terug"],
+        "refresh":     ["verfris"],
+        "select_all":  ["kies alles"],
+        "copy":        ["kopieer"],
+        "paste":       ["plak"],
+        "search":      ["soek", "soek vir"],
+        "open":        ["open", "maak oop"],
+    },
+    "isiZulu": {
+        "volume_up":   ["nyusa ivolumu", "phakamisa ivolumu"],
+        "volume_down": ["yehlisa ivolumu"],
+        "mute":        ["thulisa"],
+        "scroll_up":   ["skrolela phezulu"],
+        "scroll_down": ["skrolela phansi"],
+        "new_tab":     ["vula ithebhu entsha"],
+        "close_tab":   ["vala ithebhu"],
+        "go_back":     ["buyela emuva"],
+        "refresh":     ["vuselela"],
+        "select_all":  ["khetha konke"],
+        "copy":        ["kopisha"],
+        "paste":       ["namathisela"],
+        "search":      ["sesha", "funa"],
+        "open":        ["vula"],
+    },
+    "isiXhosa": {
+        "volume_up":   ["nyusa isandi", "nyusa ivolyum"],
+        "volume_down": ["hlisa isandi"],
+        "mute":        ["cima isandi"],
+        "scroll_up":   ["skrolela phezulu"],
+        "scroll_down": ["skrolela ezantsi"],
+        "new_tab":     ["vula ithebhu entsha"],
+        "close_tab":   ["vala ithebhu"],
+        "go_back":     ["buyela emva"],
+        "refresh":     ["vuselela"],
+        "select_all":  ["khetha konke"],
+        "copy":        ["khuphela"],
+        "paste":       ["ncamathelisa"],
+        "search":      ["khangela"],
+        "open":        ["vula"],
+    },
+    "Sesotho": {
+        "volume_up":   ["phahamisa modumo", "eketsa modumo"],
+        "volume_down": ["fokotsa modumo"],
+        "mute":        ["homotsa"],
+        "scroll_up":   ["ya hodimo"],
+        "scroll_down": ["ya tlase"],
+        "new_tab":     ["bula tab e ntjha"],
+        "close_tab":   ["kwala tab"],
+        "go_back":     ["kgutlela morao"],
+        "refresh":     ["ntjhafatsa"],
+        "select_all":  ["kgetha tsohle"],
+        "copy":        ["kopitsa"],
+        "paste":       ["manamisa"],
+        "search":      ["batla"],
+        "open":        ["bula", "qala"],
+    },
+    "Setswana": {
+        "volume_up":   ["oketsa modumo", "godisa modumo"],
+        "volume_down": ["fokotsa modumo"],
+        "mute":        ["didimatsa"],
+        "scroll_up":   ["tsamaya kwa godimo"],
+        "scroll_down": ["tsamaya kwa tlase"],
+        "new_tab":     ["bula tab e ntsha"],
+        "close_tab":   ["tswala tab"],
+        "go_back":     ["boela morago"],
+        "refresh":     ["ntlafatsa"],
+        "select_all":  ["tlhopha tsotlhe"],
+        "copy":        ["kopisa"],
+        "paste":       ["kgomaretsa"],
+        "search":      ["batla"],
+        "open":        ["bula", "simolola"],
+    },
+    "Sepedi": {
+        "volume_up":   ["oketsa modumo", "godisa modumo"],
+        "volume_down": ["fokotsa modumo"],
+        "mute":        ["homotsa modumo"],
+        "scroll_up":   ["ya godimo"],
+        "scroll_down": ["ya fase"],
+        "new_tab":     ["bula tab ye mpsha"],
+        "close_tab":   ["tswala tab"],
+        "go_back":     ["boela morago"],
+        "refresh":     ["ntlafatsa"],
+        "select_all":  ["kgetha tsohle"],
+        "copy":        ["kopolla"],
+        "paste":       ["manamisa"],
+        "search":      ["nyaka"],
+        "open":        ["bula", "thoma"],
     },
 }
 
-APP_NAMES = {
-    "chrome": ["chrome", "google chrome", "chroom"],
-    "word": ["word", "microsoft word"],
-    "vs code": ["vs code", "visual studio code", "vscode", "code"],
-    "notepad": ["notepad", "teksblok"],
-    "edge": ["edge", "microsoft edge"],
-    "whatsapp": ["whatsapp"],
-    "spotify": ["spotify"],
-    "calculator": ["calculator", "calc", "sakrekenaar"],
-    "file explorer": ["file explorer", "explorer", "lêerverkenner"],
-}
+GESTURE_COOLDOWN  = 0.8
+GAZE_DWELL_SECS   = 1.8
+GAZE_CONFIRM_TOUT = 8.0
+WAKE_WORDS        = ("neurolia", "lia", "leah", "liya")
 
 
-def find_app_name(text):
-    text = (text or "").lower().strip()
-    if not text:
-        return None
-
-    for app, aliases in APP_NAMES.items():
-        for alias in aliases:
-            if text == alias:
-                return app
-
-    for app, aliases in APP_NAMES.items():
-        for alias in aliases:
-            if alias in text:
-                return app
-
-    return text
-
-
-def find_command(user_text, selected_language):
-    raw_text = (user_text or "").strip()
-    normalized_text = raw_text.lower().strip()
-    normalized_text = re.sub(r"[?!.,]", "", normalized_text)
-
-    commands = LANGUAGE_COMMANDS.get(selected_language, LANGUAGE_COMMANDS["English (South Africa)"])
-
-    for action, phrases in commands.items():
-        for phrase in sorted(phrases, key=len, reverse=True):
-            phrase_lower = phrase.lower().strip()
-            if normalized_text == phrase_lower or normalized_text.startswith(phrase_lower + " "):
-                remaining = raw_text[len(phrase):].strip()
-                remaining = re.sub(r"[?!.,]", "", remaining)
-
-                if action == "open":
-                    target = find_app_name(remaining)
-                    return {"action": "open_app", "target": target or remaining, "language": selected_language}
-                if action == "search":
-                    return {"action": "search", "query": remaining, "language": selected_language}
-                if action == "copy":
-                    return {"action": "copy_text", "text": remaining, "language": selected_language}
-                if action == "paste":
-                    return {"action": "paste", "text": remaining, "language": selected_language}
-                return {"action": action, "language": selected_language}
-
-    return {"action": "unknown", "text": normalized_text, "language": selected_language}
-
-
-APPS = {
-    "chrome": "chrome",
-    "google chrome": "chrome",
-    "edge": "msedge",
-    "microsoft edge": "msedge",
-    "firefox": "firefox",
-    "notepad": "notepad",
-    "word": "winword",
-    "excel": "excel",
-    "powerpoint": "powerpnt",
-    "outlook": "outlook",
-    "calculator": "calc",
-    "file explorer": "explorer",
-    "explorer": "explorer",
-    "task manager": "taskmgr",
-    "settings": "ms-settings:",
-    "paint": "mspaint",
-    "vs code": "code",
-    "visual studio code": "code",
-    "code": "code",
-    "spotify": "spotify",
-    "vlc": "vlc",
-    "whatsapp": "whatsapp:",
-    "teams": "msteams:",
-}
-
-SEARCH_TARGETS = {
-    "chrome": lambda q: webbrowser.open(
-        "https://www.google.com/search?q=" + quote(q)
-    ),
-    "google": lambda q: webbrowser.open(
-        "https://www.google.com/search?q=" + quote(q)
-    ),
-    "youtube": lambda q: webbrowser.open(
-        "https://www.youtube.com/results?search_query=" + quote(q)
-    ),
-    "maps": lambda q: webbrowser.open(
-        "https://maps.google.com/?q=" + quote(q)
-    ),
-}
-
-# Hand/head gesture cooldowns prevent repeated actions every frame.
-GESTURE_COOLDOWN = 0.8
-GAZE_DWELL_SECONDS = 1.8
-GAZE_CONFIRM_TIMEOUT = 8.0
-
-
-def quote(text: str) -> str:
-    from urllib.parse import quote_plus
-    return quote_plus(text)
-
-
-# ---------------------------------------------------------------------------
-# Text-to-speech
-# ---------------------------------------------------------------------------
-
-class SpeechOutput:
-    def __init__(self):
-        self.q = queue.Queue()
-        self.engine = None
-        self.running = True
-        self.thread = threading.Thread(target=self._worker, daemon=True)
-        self.thread.start()
-
-    def _worker(self):
-        while self.running:
-            try:
-                text = self.q.get(timeout=0.2)
-            except queue.Empty:
-                continue
-
-            if text is None:
-                break
-
-            if TTS_OK:
-                try:
-                    if self.engine is None:
-                        self.engine = pyttsx3.init()
-                        self.engine.setProperty("rate", 165)
-                    self.engine.say(text)
-                    self.engine.runAndWait()
-                except Exception:
-                    pass
-
-            self.q.task_done()
-
-    def say(self, text: str):
-        if text:
-            self.q.put(str(text))
-
-    def stop(self):
-        self.running = False
-        self.q.put(None)
-
-
-TTS = SpeechOutput()
-
-
-# ---------------------------------------------------------------------------
-# Desktop control
-# ---------------------------------------------------------------------------
-
-def press(*keys):
-    if not GUI_CONTROL_OK:
-        return False
-    try:
-        if len(keys) == 1:
-            pyautogui.press(keys[0])
-        else:
-            pyautogui.hotkey(*keys)
-        return True
-    except Exception:
-        return False
-
-
-def open_target(target: str) -> bool:
-    target = target.lower().strip()
-    executable = APPS.get(target)
-
-    try:
-        if executable and executable.endswith(":"):
-            os.startfile(executable)
-            return True
-
-        if executable:
-            os.startfile(executable)
-            return True
-    except Exception:
-        pass
-
-    try:
-        if executable:
-            subprocess.Popen(executable, shell=True)
-            return True
-    except Exception:
-        pass
-
-    # If it looks like a website
-    if "." in target and " " not in target:
-        try:
-            webbrowser.open(
-                target if target.startswith("http") else "https://" + target
-            )
-            return True
-        except Exception:
-            pass
-
-    return False
-
-
-def copy_active():
-    if not GUI_CONTROL_OK or not CLIPBOARD_OK:
-        return False, ""
-    try:
-        pyautogui.hotkey("ctrl", "c")
-        time.sleep(0.2)
-        return True, pyperclip.paste()
-    except Exception:
-        return False, ""
-
-
-def paste_active(text=None):
-    if not GUI_CONTROL_OK or not CLIPBOARD_OK:
-        return False
-    try:
-        if text is not None:
-            pyperclip.copy(text)
-        pyautogui.hotkey("ctrl", "v")
-        return True
-    except Exception:
-        return False
-
-
-def type_text(text):
-    if not GUI_CONTROL_OK:
-        return False
-    try:
-        pyautogui.write(text, interval=0.015)
-        return True
-    except Exception:
-        if CLIPBOARD_OK:
-            return paste_active(text)
-        return False
-
-
-# ---------------------------------------------------------------------------
-# Command parser
-# ---------------------------------------------------------------------------
-
-def local_command(text: str, selected_language: str = "English (South Africa)"):
-    """
-    Offline fallback parser.
-    Returns a dictionary:
-        action, text/query/target/destination, reply
-    """
-    command = find_command(text, selected_language)
-    if command.get("action") != "unknown":
-        payload = dict(command)
-        reply = {
-            "open_app": f"Opening {payload.get('target', '').title()}.",
-            "search": f"Searching for {payload.get('query', '')}.",
-            "copy_text": f"Copying: {payload.get('text', '')}.",
-            "paste": "Pasting.",
-        }.get(payload.get("action"), "Command recognized.")
-        payload["reply"] = reply
-        return payload
-
+def _parse_multilang(text: str, lang: str) -> dict | None:
+    """Map a multilingual phrase to a lia4-compatible action dict."""
     c = (text or "").lower().strip()
+    c = re.sub(r"[?!.,]", "", c)
+    table = LANG_CMDS.get(lang, LANG_CMDS["English"])
 
-    if any(x in c for x in ("goodbye", "exit neurolia", "close neurolia")):
-        return {"action": "exit", "reply": "Goodbye."}
-
-    if "volume up" in c or "increase volume" in c or "turn it up" in c:
-        return {"action": "volume_up", "reply": "Volume up."}
-
-    if "volume down" in c or "decrease volume" in c or "turn it down" in c:
-        return {"action": "volume_down", "reply": "Volume down."}
-
-    if "mute" in c:
-        return {"action": "mute", "reply": "Muted."}
-
-    if "scroll up" in c:
-        return {"action": "scroll_up", "reply": "Scrolling up."}
-
-    if "scroll down" in c:
-        return {"action": "scroll_down", "reply": "Scrolling down."}
-
-    if "new tab" in c:
-        return {"action": "new_tab", "reply": "Opening a new tab."}
-
-    if "close tab" in c:
-        return {"action": "close_tab", "reply": "Closing the tab."}
-
-    if "go back" in c:
-        return {"action": "back", "reply": "Going back."}
-
-    if "refresh" in c:
-        return {"action": "refresh", "reply": "Refreshing."}
-
-    if "select all" in c:
-        return {"action": "select_all", "reply": "Selecting everything."}
-
-    if c in ("copy", "copy this", "copy that", "copy selected text"):
-        return {"action": "copy", "reply": "Copying the selected text."}
-
-    if c in ("paste", "paste that", "paste it"):
-        return {"action": "paste", "reply": "Pasting."}
-
-    m = re.search(
-        r"copy (?:everything )?(?:from )?(.+?) "
-        r"(?:and )?(?:paste|put) (?:it )?(?:in|into|to) (.+)",
-        c,
-    )
-    if m:
-        return {
-            "action": "copy_and_paste",
-            "source": m.group(1).strip(),
-            "destination": m.group(2).strip(),
-            "reply": "Copying and pasting that for you.",
-        }
-
-    m = re.search(
-        r"(?:type|write) (.+?) (?:in|into|on) (.+)",
-        c,
-    )
-    if m:
-        return {
-            "action": "type",
-            "text": m.group(1).strip(),
-            "destination": m.group(2).strip(),
-            "reply": "Typing that for you.",
-        }
-
-    m = re.search(r"(?:type|write) (.+)", c)
-    if m:
-        return {
-            "action": "type",
-            "text": m.group(1).strip(),
-            "reply": "Typing that for you.",
-        }
-
-    m = re.search(
-        r"search (?:for )?(.+?) (?:on|in|using) (.+)",
-        c,
-    )
-    if m:
-        return {
-            "action": "search",
-            "query": m.group(1).strip(),
-            "target": m.group(2).strip(),
-            "reply": "Searching for that.",
-        }
-
-    m = re.search(r"search (?:for )?(.+)", c)
-    if m:
-        return {
-            "action": "search",
-            "query": m.group(1).strip(),
-            "target": "chrome",
-            "reply": "Searching for that.",
-        }
-
-    m = re.search(r"(?:open|launch|start) (.+)", c)
-    if m:
-        return {
-            "action": "open",
-            "target": m.group(1).strip(),
-            "reply": f"Opening {m.group(1).strip()}.",
-        }
-
-    return {
-        "action": "unknown",
-        "reply": f"I heard: {text}. I am not sure what action you want.",
+    # action → lia4 action dict
+    simple_map = {
+        "volume_up":   {"action": "volume_up"},
+        "volume_down": {"action": "volume_down"},
+        "mute":        {"action": "mute"},
+        "scroll_up":   {"action": "scroll_up"},
+        "scroll_down": {"action": "scroll_down"},
+        "new_tab":     {"action": "new_tab"},
+        "close_tab":   {"action": "close_tab"},
+        "go_back":     {"action": "go_back"},
+        "refresh":     {"action": "refresh"},
+        "select_all":  {"action": "select_all"},
+        "copy":        {"action": "hotkey", "keys": ["ctrl", "c"], "label": "Copied."},
+        "paste":       {"action": "paste"},
     }
 
+    for action, phrases in table.items():
+        for phrase in sorted(phrases, key=len, reverse=True):
+            if c == phrase or c.startswith(phrase + " "):
+                remainder = c[len(phrase):].strip()
+                if action in simple_map:
+                    return simple_map[action]
+                if action == "search":
+                    return {"action": "search", "query": remainder, "target": "chrome"}
+                if action == "open":
+                    return {"action": "open_app", "target": remainder or c}
+    return None
 
-# ---------------------------------------------------------------------------
-# NeuroLia application
-# ---------------------------------------------------------------------------
 
-class NeuroLia(tk.Tk):
+# ── UI theme (mirrors lia4.py) ─────────────────────────────────────────────────
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
+
+class NeuroLiaProto(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self.title("NeuroLia Prototype")
+        self.geometry("1100x720")
+        self.minsize(900, 620)
+        self.configure(fg_color=C["bg"])
 
-        self.title("NeuroLia — Accessibility AI")
-        self.geometry("1180x760")
-        self.minsize(950, 650)
-        self.configure(bg="#09090e")
+        self._running      = True
+        self._cam_active   = False
+        self._voice_active = False
+        self._lang         = tk.StringVar(value="English")
 
-        # State
-        self.running = True
-        self.camera_running = False
-        self.voice_running = False
+        # gaze / gesture state
+        self._last_gesture: dict[str, float] = {}
+        self._hand_x_hist  = deque(maxlen=12)
+        self._hand_y_hist  = deque(maxlen=12)
+        self._head_hist    = deque(maxlen=15)
+        self._gaze_hist    = deque(maxlen=8)
+        self._gaze_start   = None
+        self._gaze_pt      = None
+        self._confirm_evt  = None
+        self._confirm_ans  = None
 
-        self.selected_language = tk.StringVar(
-            value="English (South Africa)"
-        )
+        self.tk.call("proc", "bgerror", "msg", "")
+        self._build()
+        self.protocol("WM_DELETE_WINDOW", self._quit)
 
-        self.status_var = tk.StringVar(value="Starting NeuroLia...")
-        self.gesture_var = tk.StringVar(value="No gesture detected")
-        self.gaze_var = tk.StringVar(value="Gaze: waiting for camera")
-        self.confidence_var = tk.StringVar(value="Confidence: --")
-        self.confirm_var = tk.StringVar(value="")
+        self.after(400,  self._greet)
+        self.after(1000, self._start_camera)
+        self.after(1300, self._start_voice)
 
-        self.log_lines = deque(maxlen=200)
+    # ── helpers ────────────────────────────────────────────────────────────────
+    def _f(self, sz=12, w="normal"):
+        return ctk.CTkFont(family="Helvetica", size=sz, weight=w)
 
-        self.last_gesture_time = {}
-        self.hand_x_history = deque(maxlen=12)
-        self.hand_y_history = deque(maxlen=12)
-        self.head_history = deque(maxlen=15)
+    def _log(self, who: str, text: str, color=None):
+        color = color or C["text"]
+        ts = time.strftime("%H:%M:%S")
+        self.after(0, lambda: self._append_log(f"[{ts}] {who}: {text}\n", color))
 
-        self.gaze_history = deque(maxlen=8)
-        self.gaze_start = None
-        self.gaze_point = None
-        self.confirmation_event = None
-        self.confirmation_answer = None
+    def _append_log(self, line: str, color: str):
+        self._logbox.configure(state="normal")
+        self._logbox.insert("end", line)
+        self._logbox.see("end")
+        self._logbox.configure(state="disabled")
 
-        self.calibration = {
-            "left": 0.0,
-            "right": 1.0,
-            "top": 0.0,
-            "bottom": 1.0,
-        }
+    # ── BUILD ──────────────────────────────────────────────────────────────────
+    def _build(self):
+        self.grid_columnconfigure(0, weight=3)
+        self.grid_columnconfigure(1, weight=2)
+        self.grid_rowconfigure(0, weight=1)
 
-        self.build_ui()
+        # ── left panel ────────────────────────────────────────────────────────
+        left = ctk.CTkFrame(self, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="nsew", padx=(14, 6), pady=14)
+        left.grid_rowconfigure(1, weight=1)
+        left.grid_columnconfigure(0, weight=1)
 
-        self.protocol("WM_DELETE_WINDOW", self.shutdown)
+        # header
+        hdr = ctk.CTkFrame(left, fg_color=C["panel"], corner_radius=14,
+                           border_width=1, border_color=C["border"])
+        hdr.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        hi = ctk.CTkFrame(hdr, fg_color="transparent")
+        hi.pack(fill="x", padx=16, pady=12)
+        ctk.CTkLabel(hi, text="NeuroLia Prototype", font=self._f(20, "bold"),
+                     text_color=C["text"]).pack(side="left")
+        ctk.CTkLabel(hi, text="Multilingual · Gaze · Head gestures",
+                     font=self._f(10), text_color=C["dim"]).pack(side="left", padx=12)
 
-        self.after(500, self.greet)
-        self.after(1000, self.start_camera)
-        self.after(1300, self.start_voice)
+        # language selector
+        lang_row = ctk.CTkFrame(hdr, fg_color="transparent")
+        lang_row.pack(fill="x", padx=16, pady=(0, 10))
+        ctk.CTkLabel(lang_row, text="Language:", font=self._f(11),
+                     text_color=C["dim"]).pack(side="left")
+        ctk.CTkOptionMenu(lang_row, variable=self._lang,
+                          values=list(LANGUAGES.keys()),
+                          fg_color=C["card"], button_color=C["purple"],
+                          button_hover_color=C["pur_dim"],
+                          font=self._f(11)).pack(side="left", padx=8)
 
-    # ------------------------------------------------------------------
-    # UI
-    # ------------------------------------------------------------------
+        # log
+        log_wrap = ctk.CTkFrame(left, fg_color=C["panel"], corner_radius=14,
+                                border_width=1, border_color=C["border"])
+        log_wrap.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
+        log_wrap.grid_rowconfigure(0, weight=1)
+        log_wrap.grid_columnconfigure(0, weight=1)
 
-    def build_ui(self):
-        top = tk.Frame(self, bg="#111118")
-        top.pack(fill="x", padx=14, pady=(14, 8))
+        self._logbox = tk.Text(log_wrap, bg=C["panel"], fg=C["text"],
+                               insertbackground=C["text"], font=("Consolas", 11),
+                               wrap="word", state="disabled", relief="flat",
+                               padx=12, pady=12)
+        self._logbox.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
 
-        tk.Label(
-            top,
-            text="NEUROLIA",
-            bg="#111118",
-            fg="#f0eeff",
-            font=("Segoe UI", 24, "bold"),
-        ).pack(side="left", padx=14, pady=12)
+        # input bar
+        bar = ctk.CTkFrame(left, fg_color=C["panel"], corner_radius=14,
+                           border_width=1, border_color=C["border"])
+        bar.grid(row=2, column=0, sticky="ew")
+        bi = ctk.CTkFrame(bar, fg_color="transparent")
+        bi.pack(fill="x", padx=10, pady=10)
+        self._entry = ctk.CTkEntry(bi, height=42,
+                                   placeholder_text="Type a command...",
+                                   fg_color=C["card"], border_color=C["border"],
+                                   text_color=C["text"], font=self._f(12))
+        self._entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self._entry.bind("<Return>", lambda e: self._send_text())
+        ctk.CTkButton(bi, text="Send", width=68, height=42, corner_radius=10,
+                      fg_color=C["purple"], hover_color=C["pur_dim"],
+                      font=self._f(12, "bold"),
+                      command=self._send_text).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(bi, text="Stop", width=60, height=42, corner_radius=10,
+                      fg_color=C["coral"], hover_color="#8b2020",
+                      font=self._f(11, "bold"),
+                      command=stop_speaking).pack(side="left")
 
-        tk.Label(
-            top,
-            text="Adaptive AI accessibility interface",
-            bg="#111118",
-            fg="#6b6890",
-            font=("Segoe UI", 11),
-        ).pack(side="left")
+        # ── right panel ───────────────────────────────────────────────────────
+        right = ctk.CTkFrame(self, fg_color="transparent")
+        right.grid(row=0, column=1, sticky="nsew", padx=(0, 14), pady=14)
+        right.grid_rowconfigure(1, weight=1)
+        right.grid_columnconfigure(0, weight=1)
 
-        lang = ttk.Combobox(
-            top,
-            textvariable=self.selected_language,
-            values=list(LANGUAGES.keys()),
-            state="readonly",
-            width=24,
-        )
-        lang.pack(side="right", padx=14)
+        cam_hdr = ctk.CTkFrame(right, fg_color="transparent")
+        cam_hdr.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ctk.CTkLabel(cam_hdr, text="Camera — gesture + gaze",
+                     font=self._f(12, "bold"), text_color=C["text"]).pack(side="left")
+        self._cam_status = ctk.CTkLabel(cam_hdr, text="● Starting",
+                                        font=self._f(10), text_color=C["amber"])
+        self._cam_status.pack(side="right")
 
-        tk.Label(
-            top,
-            text="Language",
-            bg="#111118",
-            fg="#6b6890",
-        ).pack(side="right")
+        cam_wrap = ctk.CTkFrame(right, fg_color=C["card"], corner_radius=12,
+                                border_width=1, border_color=C["border"])
+        cam_wrap.grid(row=1, column=0, sticky="nsew", pady=(0, 8))
+        cam_wrap.grid_rowconfigure(0, weight=1)
+        cam_wrap.grid_columnconfigure(0, weight=1)
+        self._cam_lbl = ctk.CTkLabel(cam_wrap,
+                                     text="📷  Camera loading...",
+                                     font=self._f(11), text_color=C["dim"])
+        self._cam_lbl.grid(row=0, column=0, sticky="nsew")
 
-        main = tk.Frame(self, bg="#09090e")
-        main.pack(fill="both", expand=True, padx=14, pady=(0, 14))
+        # gaze / gesture status
+        info = ctk.CTkFrame(right, fg_color=C["card"], corner_radius=10,
+                            border_width=1, border_color=C["border"])
+        info.grid(row=2, column=0, sticky="ew", pady=(0, 8))
+        ii = ctk.CTkFrame(info, fg_color="transparent")
+        ii.pack(fill="x", padx=12, pady=8)
+        self._gesture_lbl = ctk.CTkLabel(ii, text="Gesture: —",
+                                         font=self._f(10), text_color=C["dim"])
+        self._gesture_lbl.pack(anchor="w")
+        self._gaze_lbl = ctk.CTkLabel(ii, text="Gaze: —",
+                                      font=self._f(10), text_color=C["dim"])
+        self._gaze_lbl.pack(anchor="w")
+        self._conf_lbl = ctk.CTkLabel(ii, text="Confidence: —",
+                                      font=self._f(10), text_color=C["dim"])
+        self._conf_lbl.pack(anchor="w")
 
-        left = tk.Frame(main, bg="#111118")
-        left.pack(side="left", fill="both", expand=True, padx=(0, 7))
+        # confirmation banner
+        self._confirm_banner = ctk.CTkLabel(right, text="",
+                                            font=self._f(12, "bold"),
+                                            text_color=C["text"],
+                                            fg_color=C["pur_dim"],
+                                            corner_radius=8, wraplength=340)
+        self._confirm_banner.grid(row=3, column=0, sticky="ew", pady=(0, 8))
 
-        right = tk.Frame(main, bg="#111118", width=410)
-        right.pack(side="right", fill="both", padx=(7, 0))
-        right.pack_propagate(False)
+        # gesture legend
+        leg = ctk.CTkFrame(right, fg_color=C["card"], corner_radius=10,
+                           border_width=1, border_color=C["border"])
+        leg.grid(row=4, column=0, sticky="ew")
+        li = ctk.CTkFrame(leg, fg_color="transparent")
+        li.pack(fill="x", padx=12, pady=8)
+        ctk.CTkLabel(li, text="GESTURES", font=self._f(9, "bold"),
+                     text_color=C["dim"]).pack(anchor="w", pady=(0, 4))
+        for g, a in [("Fist", "Volume down"),
+                     ("Open palm", "Volume up"),
+                     ("Swipe right", "Next tab"),
+                     ("Swipe left", "Close tab"),
+                     ("Hand wave up/down", "Scroll"),
+                     ("Nod / Thumbs up", "Confirm"),
+                     ("Thumbs down", "Cancel"),
+                     ("Pinch index+thumb", "Click"),
+                     ("Gaze dwell", "Ask to click")]:
+            r = ctk.CTkFrame(li, fg_color="transparent")
+            r.pack(fill="x", pady=1)
+            ctk.CTkLabel(r, text=g, font=self._f(9), text_color=C["dim"]).pack(side="left")
+            ctk.CTkLabel(r, text=a, font=self._f(9), text_color=C["purple"]).pack(side="right")
 
-        # Status
-        tk.Label(
-            left,
-            textvariable=self.status_var,
-            bg="#111118",
-            fg="#20c97a",
-            font=("Segoe UI", 18, "bold"),
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(16, 3))
+    # ── greet ──────────────────────────────────────────────────────────────────
+    def _greet(self):
+        msg = ("Hello! I'm NeuroLia Prototype. "
+               "I support multilingual commands, head gestures, and eye gaze. "
+               "Say NeuroLia or type a command.")
+        self._log("NeuroLia", msg)
+        speak(msg)
 
-        tk.Label(
-            left,
-            text="Say “NeuroLia” followed by a command.",
-            bg="#111118",
-            fg="#6b6890",
-            font=("Segoe UI", 10),
-            anchor="w",
-        ).pack(fill="x", padx=16, pady=(0, 10))
-
-        # Conversation log
-        log_frame = tk.Frame(left, bg="#18181f")
-        log_frame.pack(fill="both", expand=True, padx=12, pady=8)
-
-        self.log = tk.Text(
-            log_frame,
-            bg="#18181f",
-            fg="#f0eeff",
-            insertbackground="#f0eeff",
-            font=("Consolas", 11),
-            wrap="word",
-            state="disabled",
-            relief="flat",
-            padx=12,
-            pady=12,
-        )
-        self.log.pack(side="left", fill="both", expand=True)
-
-        scroll = ttk.Scrollbar(
-            log_frame, orient="vertical", command=self.log.yview
-        )
-        scroll.pack(side="right", fill="y")
-        self.log.configure(yscrollcommand=scroll.set)
-
-        # Text command
-        command_frame = tk.Frame(left, bg="#111118")
-        command_frame.pack(fill="x", padx=12, pady=10)
-
-        self.command_entry = tk.Entry(
-            command_frame,
-            bg="#18181f",
-            fg="#f0eeff",
-            insertbackground="#f0eeff",
-            font=("Segoe UI", 12),
-            relief="flat",
-        )
-        self.command_entry.pack(
-            side="left", fill="x", expand=True, ipady=10
-        )
-        self.command_entry.bind("<Return>", lambda e: self.send_text())
-
-        tk.Button(
-            command_frame,
-            text="SEND",
-            command=self.send_text,
-            bg="#8b7cf8",
-            fg="white",
-            activebackground="#2d2860",
-            relief="flat",
-            font=("Segoe UI", 10, "bold"),
-            width=10,
-        ).pack(side="right", padx=(8, 0), ipady=7)
-
-        # Camera
-        tk.Label(
-            right,
-            text="CAMERA / MULTIMODAL CONTROL",
-            bg="#111118",
-            fg="#f0eeff",
-            font=("Segoe UI", 11, "bold"),
-        ).pack(anchor="w", padx=14, pady=(14, 6))
-
-        self.camera_label = tk.Label(
-            right,
-            text="Camera loading...",
-            bg="#18181f",
-            fg="#6b6890",
-            font=("Segoe UI", 11),
-        )
-        self.camera_label.pack(
-            fill="both", expand=True, padx=14, pady=4
-        )
-
-        # Detection status
-        status = tk.Frame(right, bg="#18181f")
-        status.pack(fill="x", padx=14, pady=8)
-
-        for variable in (
-            self.gesture_var,
-            self.gaze_var,
-            self.confidence_var,
-        ):
-            tk.Label(
-                status,
-                textvariable=variable,
-                bg="#18181f",
-                fg="#6b6890",
-                anchor="w",
-                font=("Segoe UI", 10),
-            ).pack(fill="x", padx=10, pady=3)
-
-        # Confirmation
-        self.confirm_label = tk.Label(
-            right,
-            textvariable=self.confirm_var,
-            bg="#2d2860",
-            fg="#f0eeff",
-            font=("Segoe UI", 13, "bold"),
-            wraplength=360,
-            padx=10,
-            pady=10,
-        )
-        self.confirm_label.pack(fill="x", padx=14, pady=6)
-
-        # Gesture legend
-        legend = tk.Frame(right, bg="#111118")
-        legend.pack(fill="x", padx=14, pady=8)
-
-        tk.Label(
-            legend,
-            text="GESTURE CONTROLS",
-            bg="#111118",
-            fg="#6b6890",
-            font=("Segoe UI", 9, "bold"),
-        ).pack(anchor="w")
-
-        gestures = [
-            ("✊ Fist", "Volume down"),
-            ("✋ Open palm", "Volume up"),
-            ("👉 Swipe right", "Next tab"),
-            ("👈 Swipe left", "Close tab"),
-            ("↕ Hand wave", "Scroll"),
-            ("👍 Thumbs up / Nod", "Confirm"),
-            ("👎 Thumbs down / Shake", "Cancel"),
-            ("👁 Gaze dwell", "Ask before click"),
-        ]
-
-        for g, a in gestures:
-            row = tk.Frame(legend, bg="#111118")
-            row.pack(fill="x")
-            tk.Label(
-                row, text=g, bg="#111118", fg="#f0eeff",
-                font=("Segoe UI", 9), anchor="w"
-            ).pack(side="left")
-            tk.Label(
-                row, text=a, bg="#111118", fg="#8b7cf8",
-                font=("Segoe UI", 9), anchor="e"
-            ).pack(side="right")
-
-        # Emergency stop
-        tk.Button(
-            right,
-            text="STOP CURRENT ACTION",
-            command=self.cancel_action,
-            bg="#3d1010",
-            fg="#e85545",
-            activebackground="#5a1717",
-            relief="flat",
-            font=("Segoe UI", 10, "bold"),
-        ).pack(fill="x", padx=14, pady=(4, 14), ipady=8)
-
-    # ------------------------------------------------------------------
-    # Logging
-    # ------------------------------------------------------------------
-
-    def log_message(self, who, text):
-        timestamp = time.strftime("%H:%M:%S")
-        self.log.configure(state="normal")
-        self.log.insert(
-            "end",
-            f"[{timestamp}] {who}: {text}\n"
-        )
-        self.log.see("end")
-        self.log.configure(state="disabled")
-
-    def set_status(self, text, color="#20c97a"):
-        self.status_var.set(text)
-
-    # ------------------------------------------------------------------
-    # Greeting
-    # ------------------------------------------------------------------
-
-    def greet(self):
-        message = (
-            "Hello. I'm NeuroLia. I can control your computer with voice, "
-            "hand gestures, head movements and eye gaze."
-        )
-        self.log_message("NeuroLia", message)
-        TTS.say(message)
-
-    # ------------------------------------------------------------------
-    # Voice
-    # ------------------------------------------------------------------
-
-    def start_voice(self):
-        if not SPEECH_OK:
-            self.log_message(
-                "System",
-                "SpeechRecognition is unavailable. Text commands still work."
-            )
+    # ── voice ──────────────────────────────────────────────────────────────────
+    def _start_voice(self):
+        if not _SR:
+            self._log("System", "SpeechRecognition unavailable — type instead", C["coral"])
             return
+        self._voice_active = True
+        threading.Thread(target=self._voice_loop, daemon=True).start()
 
-        self.voice_running = True
-        threading.Thread(
-            target=self.voice_loop,
-            daemon=True,
-        ).start()
+    def _voice_loop(self):
+        rec = sr.Recognizer()
+        rec.dynamic_energy_threshold = False
+        WAKE = re.compile(r"\b(neurolia|lia|leah|liya)\b", re.IGNORECASE)
 
-    def voice_loop(self):
-        recognizer = sr.Recognizer()
-        recognizer.dynamic_energy_threshold = True
-
+        # one-time calibration
+        self._log("System", "Calibrating microphone...", C["amber"])
+        calibrated = 300
         try:
-            with sr.Microphone() as source:
-                recognizer.adjust_for_ambient_noise(source, duration=1)
-        except Exception as exc:
-            self.after(
-                0,
-                lambda: self.log_message(
-                    "System",
-                    f"Microphone unavailable: {exc}"
-                ),
-            )
-            return
+            with sr.Microphone() as src:
+                rec.adjust_for_ambient_noise(src, duration=1.5)
+                calibrated = max(rec.energy_threshold * 1.2, 200)
+                rec.energy_threshold = calibrated
+        except Exception:
+            rec.energy_threshold = calibrated
+        self._log("System", f"Ready — threshold {int(calibrated)}. Say 'NeuroLia' to wake.", C["teal"])
 
-        while self.running and self.voice_running:
+        while self._running and self._voice_active:
+            # re-read language each loop so switching the dropdown takes effect immediately
+            lang_code = LANGUAGES.get(self._lang.get(), "en-US")
+
+            # ── PHASE 1: wake-word gate ────────────────────────────────────────
             try:
-                self.after(
-                    0,
-                    lambda: self.set_status(
-                        "Listening for NeuroLia..."
-                    ),
-                )
-
-                with sr.Microphone() as source:
-                    audio = recognizer.listen(
-                        source,
-                        timeout=5,
-                        phrase_time_limit=4,
-                    )
-
-                language = LANGUAGES.get(
-                    self.selected_language.get(), "en-ZA"
-                )
-
-                try:
-                    heard = recognizer.recognize_google(
-                        audio,
-                        language=language,
-                    ).strip()
-                except Exception:
-                    # English fallback can be useful when a regional
-                    # language model is unavailable.
-                    heard = recognizer.recognize_google(
-                        audio,
-                        language="en-US",
-                    ).strip()
-
-                if not heard:
-                    continue
-
-                if not self.contains_wake_word(heard):
-                    continue
-
-                command = self.remove_wake_word(heard)
-
-                self.after(
-                    0,
-                    lambda h=heard: self.log_message(
-                        "Voice", h
-                    ),
-                )
-
-                if not command:
-                    TTS.say("Yes? What would you like me to do?")
-                    continue
-
-                self.after(
-                    0,
-                    lambda c=command: self.run_command(c),
-                )
-
+                with sr.Microphone() as src:
+                    rec.energy_threshold = calibrated
+                    wake_audio = rec.listen(src, timeout=8, phrase_time_limit=4)
             except sr.WaitTimeoutError:
                 continue
             except Exception:
                 time.sleep(0.5)
+                continue
 
-    def contains_wake_word(self, text):
-        lower = text.lower()
-        return any(
-            re.search(r"\b" + re.escape(w) + r"\b", lower)
-            for w in WAKE_WORDS
-        )
+            try:
+                heard = rec.recognize_google(wake_audio, language=lang_code).lower().strip()
+            except sr.UnknownValueError:
+                continue
+            except sr.RequestError:
+                self._log("System", "No internet — check connection", C["coral"])
+                time.sleep(3)
+                continue
 
-    def remove_wake_word(self, text):
-        result = text
-        for word in WAKE_WORDS:
-            result = re.sub(
-                r"\b" + re.escape(word) + r"\b",
-                "",
-                result,
-                flags=re.IGNORECASE,
-            )
-        return re.sub(r"\s+", " ", result).strip(" ,.!?")
+            if not WAKE.search(heard):
+                continue
 
-    # ------------------------------------------------------------------
-    # Commands
-    # ------------------------------------------------------------------
+            # strip wake word — if a command followed inline, use it directly
+            inline = WAKE.sub("", heard).strip(" ,.")
+            self._log("Voice", f'Wake: "{heard}"', C["purple"])
 
-    def send_text(self):
-        text = self.command_entry.get().strip()
-        if not text:
+            if inline and len(inline) >= 2:
+                self.after(0, lambda c=inline: self._run(c))
+                continue
+
+            # ── PHASE 2: command listen ────────────────────────────────────────
+            speak("Yes?")
+            time.sleep(0.8)   # wait for TTS to finish before opening mic
+            try:
+                with sr.Microphone() as src:
+                    rec.adjust_for_ambient_noise(src, duration=0.4)
+                    rec.energy_threshold = max(rec.energy_threshold * 1.1, calibrated * 0.8)
+                    cmd_audio = rec.listen(src, timeout=7, phrase_time_limit=12)
+            except sr.WaitTimeoutError:
+                self._log("System", "No command heard — say 'NeuroLia' again", C["coral"])
+                continue
+            except Exception:
+                time.sleep(0.5)
+                continue
+
+            try:
+                command = rec.recognize_google(cmd_audio, language=lang_code).strip()
+            except sr.UnknownValueError:
+                self._log("System", "Couldn't understand — try again", C["coral"])
+                continue
+            except sr.RequestError:
+                time.sleep(3)
+                continue
+
+            if not command or len(command.strip()) < 2:
+                continue
+
+            clean = WAKE.sub("", command).strip(" ,.")
+            if not clean:
+                speak("I'm listening. What would you like me to do?")
+                continue
+
+            self._log("Voice", f'Command: "{clean}"', C["teal"])
+            self.after(0, lambda c=clean: self._run(c))
+
+    # ── command dispatch ───────────────────────────────────────────────────────
+    def _send_text(self):
+        t = self._entry.get().strip()
+        if t:
+            self._entry.delete(0, "end")
+            self._run(t)
+
+    def _run(self, text: str):
+        self._log("You", text)
+        threading.Thread(target=self._process, args=(text,), daemon=True).start()
+
+    def _process(self, text: str):
+        lang = self._lang.get()
+
+        # 1. multilingual table (non-English wake phrases)
+        data = _parse_multilang(text, lang)
+
+        # 2. engine local parser (fast, no network)
+        if data is None:
+            from engine import parse_command as _eng_parse
+            data = _eng_parse(text)
+
+        # 3. GPT / local fallback
+        if data is None:
+            data = ask_gpt(text)
+
+        if not isinstance(data, dict):
+            data = _local_parse(text)
+
+        data = _normalize_action(data)
+        reply = str(data.get("reply") or "Done.")
+        action = data.get("action", "converse")
+
+        self._log("NeuroLia", reply, C["teal"])
+        speak(reply)
+
+        if action == "converse":
             return
-        self.command_entry.delete(0, "end")
-        self.run_command(text)
-
-    def run_command(self, text):
-        self.log_message("You", text)
-        self.set_status("Thinking...")
-        threading.Thread(
-            target=self._process_command,
-            args=(text,),
-            daemon=True,
-        ).start()
-
-    def _process_command(self, text):
-        data = local_command(text)
-        reply = data.get("reply", "Done.")
-
-        self.after(
-            0,
-            lambda: self.log_message("NeuroLia", reply)
-        )
-        TTS.say(reply)
-
-        action = data.get("action")
-
-        try:
-            if action == "open":
-                ok = open_target(data.get("target", ""))
-                result = "Opened." if ok else "I couldn't open that."
-
-            elif action == "search":
-                result = self.execute_search(
-                    data.get("target", "chrome"),
-                    data.get("query", ""),
-                )
-
-            elif action == "copy":
-                ok, copied = copy_active()
-                result = (
-                    "Copied the selected text."
-                    if ok else
-                    "I couldn't copy the selected text."
-                )
-
-            elif action == "paste":
-                result = (
-                    "Pasted."
-                    if paste_active()
-                    else "I couldn't paste."
-                )
-
-            elif action == "copy_and_paste":
-                result = self.copy_between_apps(
-                    data.get("source", ""),
-                    data.get("destination", ""),
-                )
-
-            elif action == "type":
-                if data.get("destination"):
-                    open_target(data["destination"])
-                    time.sleep(1)
-                ok = type_text(data.get("text", ""))
-                result = "Typed." if ok else "I couldn't type that."
-
-            elif action == "volume_up":
-                press("volumeup")
-                result = "Volume up."
-
-            elif action == "volume_down":
-                press("volumedown")
-                result = "Volume down."
-
-            elif action == "mute":
-                press("volumemute")
-                result = "Muted."
-
-            elif action == "scroll_up":
-                if GUI_CONTROL_OK:
-                    pyautogui.scroll(5)
-                result = "Scrolling up."
-
-            elif action == "scroll_down":
-                if GUI_CONTROL_OK:
-                    pyautogui.scroll(-5)
-                result = "Scrolling down."
-
-            elif action == "new_tab":
-                press("ctrl", "t")
-                result = "New tab."
-
-            elif action == "close_tab":
-                press("ctrl", "w")
-                result = "Closed the tab."
-
-            elif action == "back":
-                press("alt", "left")
-                result = "Going back."
-
-            elif action == "refresh":
-                press("ctrl", "r")
-                result = "Refreshed."
-
-            elif action == "select_all":
-                press("ctrl", "a")
-                result = "Selected all."
-
-            elif action == "exit":
-                self.after(0, self.shutdown)
-                return
-
-            else:
-                result = reply
-
-            self.after(
-                0,
-                lambda r=result: self.log_message(
-                    "Action", r
-                )
-            )
-
-        except Exception as exc:
-            self.after(
-                0,
-                lambda: self.log_message(
-                    "Error", str(exc)
-                )
-            )
-
-        self.after(
-            0,
-            lambda: self.set_status(
-                "Ready — say NeuroLia or use a gesture"
-            )
-        )
-
-    def execute_search(self, target, query):
-        target = target.lower().strip()
-
-        if target in SEARCH_TARGETS:
-            SEARCH_TARGETS[target](query)
-            return f"Searching {target}."
-
-        webbrowser.open(
-            "https://www.google.com/search?q=" + quote(query)
-        )
-        return "Searching Google."
-
-    def copy_between_apps(self, source, destination):
-        if source:
-            open_target(source)
-            time.sleep(1)
-
-        ok, copied = copy_active()
-
-        if not ok:
-            return "I couldn't copy the source."
-
-        if destination:
-            open_target(destination)
-            time.sleep(1)
-
-        if paste_active(copied):
-            return "Copied and pasted successfully."
-
-        return "I copied the text, but couldn't paste it."
-
-    # ------------------------------------------------------------------
-    # Confirmation system
-    # ------------------------------------------------------------------
-
-    def ask_confirmation(self, question):
-        """
-        Ask using text + voice.
-        Returns True, False or None.
-        """
-        self.confirmation_answer = None
-        self.confirmation_event = threading.Event()
-
-        self.after(
-            0,
-            lambda: self.confirm_var.set(question)
-        )
-
-        TTS.say(question)
-
-        # Give the user a chance to answer with voice or gesture.
-        finished = self.confirmation_event.wait(
-            GAZE_CONFIRM_TIMEOUT
-        )
-
-        answer = self.confirmation_answer
-
-        self.after(
-            0,
-            lambda: self.confirm_var.set("")
-        )
-
-        return answer if finished else None
-
-    def confirm_yes(self):
-        self.confirmation_answer = True
-        if self.confirmation_event:
-            self.confirmation_event.set()
-
-    def confirm_no(self):
-        self.confirmation_answer = False
-        if self.confirmation_event:
-            self.confirmation_event.set()
-
-    def cancel_action(self):
-        self.confirmation_answer = False
-        if self.confirmation_event:
-            self.confirmation_event.set()
-
-        self.confirm_var.set("")
-        self.log_message("NeuroLia", "Current action cancelled.")
-        TTS.say("Current action cancelled.")
-
-    # ------------------------------------------------------------------
-    # Camera
-    # ------------------------------------------------------------------
-
-    def start_camera(self):
-        if not CAMERA_OK:
-            self.camera_label.configure(
-                text="Camera libraries unavailable.\n"
-                     "Install OpenCV, MediaPipe and Pillow."
-            )
+        if action == "exit":
+            self.after(1500, self._quit)
+            return
+        if action in ("cursor_on", "cursor_off", "cursor_toggle"):
+            # prototype has no real cursor controller; just log it
+            self._log("System", f"Cursor mode: {action}", C["amber"])
+            return
+        if not is_allowed(data):
+            self._log("System", "Action not allowed.", C["coral"])
+            return
+        if needs_confirmation(data):
+            prompt = confirmation_prompt(data)
+            self._log("NeuroLia", prompt, C["amber"])
+            speak(prompt)
             return
 
-        self.camera_running = True
+        result = execute(data, confirmed=True)
+        color = C["coral"] if is_failure(result) else C["teal"]
+        self._log("Action", result, color)
 
-        threading.Thread(
-            target=self.camera_loop,
-            daemon=True,
-        ).start()
+    # ── camera ─────────────────────────────────────────────────────────────────
+    def _start_camera(self):
+        if not _CAM:
+            self.after(0, lambda: self._cam_status.configure(
+                text="● Not installed", text_color=C["coral"]))
+            return
+        self._cam_active = True
+        self.after(0, lambda: self._cam_status.configure(
+            text="● Live", text_color=C["teal"]))
+        threading.Thread(target=self._cam_loop, daemon=True).start()
 
-    def camera_loop(self):
+    def _cam_loop(self):
         cap = cv2.VideoCapture(0)
-
         if not cap.isOpened():
-            self.after(
-                0,
-                lambda: self.camera_label.configure(
-                    text="Could not open camera."
-                ),
-            )
+            self.after(0, lambda: self._cam_status.configure(
+                text="● No camera", text_color=C["coral"]))
             return
 
-        hands = None
-        face_mesh = None
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        _ui_pending = False
 
-        try:
-            hands = mp.solutions.hands.Hands(
-                static_image_mode=False,
+        def _clear():
+            nonlocal _ui_pending
+            _ui_pending = False
+
+        with mp.solutions.hands.Hands(
                 max_num_hands=1,
-                min_detection_confidence=0.55,
-                min_tracking_confidence=0.55,
-            )
-
-            face_mesh = mp.solutions.face_mesh.FaceMesh(
-                static_image_mode=False,
+                min_detection_confidence=0.6,
+                min_tracking_confidence=0.5) as hands, \
+             mp.solutions.face_mesh.FaceMesh(
                 max_num_faces=1,
                 refine_landmarks=True,
-                min_detection_confidence=0.5,
-                min_tracking_confidence=0.5,
-            )
+                min_detection_confidence=0.6,
+                min_tracking_confidence=0.5) as face_mesh:
 
-            while self.running and self.camera_running:
+            while self._running and self._cam_active:
                 ok, frame = cap.read()
                 if not ok:
-                    continue
-
+                    break
                 frame = cv2.flip(frame, 1)
-
-                rgb = cv2.cvtColor(
-                    frame,
-                    cv2.COLOR_BGR2RGB,
-                )
-
-                hand_result = hands.process(rgb)
-                face_result = face_mesh.process(rgb)
+                rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                hr    = hands.process(rgb)
+                fr    = face_mesh.process(rgb)
 
                 gesture = None
+                finger_tip_px = None  # index fingertip in frame pixels for cursor dot
 
-                if hand_result.multi_hand_landmarks:
-                    gesture = self.detect_hand_gesture(
-                        hand_result.multi_hand_landmarks[0]
-                    )
+                if hr.multi_hand_landmarks:
+                    hl = hr.multi_hand_landmarks[0]
+                    gesture = self._detect_hand(hl)
+                    # compute fingertip pixel position for the on-screen cursor dot
+                    tip = hl.landmark[8]
+                    h2f, w2f = frame.shape[:2]
+                    finger_tip_px = (int(tip.x * w2f), int(tip.y * h2f))
 
-                if face_result.multi_face_landmarks:
-                    face = face_result.multi_face_landmarks[0]
-                    head_gesture = self.detect_head_gesture(face)
-
-                    if head_gesture:
-                        gesture = head_gesture
-
-                    self.process_gaze(
-                        face,
-                        frame.shape[1],
-                        frame.shape[0],
-                    )
+                if fr.multi_face_landmarks:
+                    face = fr.multi_face_landmarks[0]
+                    hg = self._detect_head(face)
+                    if hg:
+                        gesture = hg
+                    self._process_gaze(face, frame.shape[1], frame.shape[0])
 
                 if gesture:
-                    self.trigger_gesture(gesture)
+                    self.after(0, lambda g=gesture: self._trigger_gesture(g))
 
-                # Draw a simple center reticle.
-                h, w = frame.shape[:2]
-                cv2.circle(
-                    frame,
-                    (w // 2, h // 2),
-                    5,
-                    (139, 124, 248),
-                    -1,
-                )
+                # draw finger cursor dot (no mouse/keyboard — purely visual on the feed)
+                if finger_tip_px:
+                    cv2.circle(frame, finger_tip_px, 10, (139, 100, 255), -1)
+                    cv2.circle(frame, finger_tip_px, 13, (200, 170, 255), 2)
 
-                # Gaze cursor
-                if self.gaze_point:
-                    gx, gy = self.gaze_point
-                    cv2.circle(
-                        frame,
-                        (int(gx * w), int(gy * h)),
-                        12,
-                        (32, 201, 122),
-                        2,
-                    )
+                # draw gaze cursor
+                if self._gaze_pt:
+                    gx, gy = self._gaze_pt
+                    h2, w2 = frame.shape[:2]
+                    cv2.circle(frame, (int(gx * w2), int(gy * h2)), 12, (32, 201, 122), 2)
 
-                small_w = 390
-                small_h = int(
-                    frame.shape[0] * small_w / frame.shape[1]
-                )
+                if not _ui_pending:
+                    h2, w2 = frame.shape[:2]
+                    tw = min(240, w2)
+                    th = int(h2 * tw / w2)
+                    sm = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), (tw, th))
+                    img = ctk.CTkImage(light_image=Image.fromarray(sm), size=(tw, th))
+                    _ui_pending = True
+                    self.after(0, lambda p=img: (
+                        self._cam_lbl.configure(image=p, text="") or _clear()))
 
-                display = cv2.resize(
-                    frame,
-                    (small_w, small_h),
-                )
+        cap.release()
 
-                display = cv2.cvtColor(
-                    display,
-                    cv2.COLOR_BGR2RGB,
-                )
-
-                image = Image.fromarray(display)
-                photo = ImageTk.PhotoImage(image=image)
-
-                self.after(
-                    0,
-                    lambda p=photo: self.update_camera_image(p)
-                )
-
-                time.sleep(0.02)
-
-        except Exception as exc:
-            self.after(
-                0,
-                lambda: self.log_message(
-                    "Camera",
-                    f"Camera engine error: {exc}"
-                )
-            )
-        finally:
-            if hands:
-                hands.close()
-            if face_mesh:
-                face_mesh.close()
-            cap.release()
-
-    def update_camera_image(self, photo):
-        if not self.running:
-            return
-        self.camera_label.configure(image=photo, text="")
-        self.camera_label.image = photo
-
-    # ------------------------------------------------------------------
-    # Hand recognition
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def distance(a, b):
-        return math.sqrt(
-            (a.x - b.x) ** 2 +
-            (a.y - b.y) ** 2 +
-            (a.z - b.z) ** 2
-        )
-
-    def finger_extended(self, lm, tip, pip):
-        return lm[tip].y < lm[pip].y
-
-    def detect_hand_gesture(self, hand):
+    # ── hand gesture detection ─────────────────────────────────────────────────
+    def _detect_hand(self, hand) -> str | None:
         lm = hand.landmark
 
-        # Finger states
-        index = self.finger_extended(lm, 8, 6)
-        middle = self.finger_extended(lm, 12, 10)
-        ring = self.finger_extended(lm, 16, 14)
-        pinky = self.finger_extended(lm, 20, 18)
+        # normalised hand size (wrist to middle-MCP) for ratio comparisons
+        size = math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y) or 1e-6
 
-        palm = lm[9]
+        # pinch: thumb tip (4) close to index tip (8) — checked FIRST
+        pinch_ratio = math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) / size
+        if pinch_ratio < 0.30:
+            return "pinch"
 
-        # Fist
-        extended_count = sum(
-            [index, middle, ring, pinky]
-        )
+        ext = [lm[t].y < lm[p].y for t, p in [(8, 6), (12, 10), (16, 14), (20, 18)]]
+        count = sum(ext)
+        palm  = lm[9]
 
-        if extended_count == 0:
-            self.hand_x_history.append(palm.x)
-            self.hand_y_history.append(palm.y)
+        if count == 0:
+            self._hand_x_hist.append(palm.x)
+            self._hand_y_hist.append(palm.y)
             return "fist"
 
-        # Open palm
-        if extended_count >= 4:
-            self.hand_x_history.append(palm.x)
-            self.hand_y_history.append(palm.y)
-
-            if len(self.hand_x_history) >= 8:
-                dx = (
-                    self.hand_x_history[-1]
-                    - self.hand_x_history[0]
-                )
+        if count >= 4:
+            self._hand_x_hist.append(palm.x)
+            self._hand_y_hist.append(palm.y)
+            if len(self._hand_x_hist) >= 8:
+                dx = self._hand_x_hist[-1] - self._hand_x_hist[0]
                 if abs(dx) > 0.22:
-                    self.hand_x_history.clear()
-                    return (
-                        "hand_swipe_right"
-                        if dx > 0
-                        else "hand_swipe_left"
-                    )
-
-                dy = (
-                    self.hand_y_history[-1]
-                    - self.hand_y_history[0]
-                )
+                    self._hand_x_hist.clear()
+                    return "hand_swipe_right" if dx > 0 else "hand_swipe_left"
+                dy = self._hand_y_hist[-1] - self._hand_y_hist[0]
                 if abs(dy) > 0.18:
-                    self.hand_y_history.clear()
-                    return (
-                        "hand_wave_down"
-                        if dy > 0
-                        else "hand_wave_up"
-                    )
-
+                    self._hand_y_hist.clear()
+                    return "hand_wave_down" if dy > 0 else "hand_wave_up"
             return "open_palm"
 
-        # Thumbs-up / thumbs-down
-        thumb_up = lm[4].y < lm[3].y
-        thumb_down = lm[4].y > lm[3].y
-
-        if index and not middle and not ring and not pinky:
-            return "point"
-
-        if thumb_up and extended_count <= 1:
+        if lm[4].y < lm[3].y and count <= 1:
             return "thumbs_up"
-
-        if thumb_down and extended_count <= 1:
+        if lm[4].y > lm[3].y and count <= 1:
             return "thumbs_down"
-
         return None
 
-    # ------------------------------------------------------------------
-    # Head recognition
-    # ------------------------------------------------------------------
-
-    def detect_head_gesture(self, face):
-        """
-        Prototype head gesture detection.
-        Uses the nose landmark as a coarse head-position signal.
-        """
+    # ── head gesture detection ─────────────────────────────────────────────────
+    def _detect_head(self, face) -> str | None:
         nose = face.landmark[1]
-
-        self.head_history.append(
-            (nose.x, nose.y, time.time())
-        )
-
-        if len(self.head_history) < 10:
+        self._head_hist.append((nose.x, nose.y, time.time()))
+        if len(self._head_hist) < 10:
             return None
-
-        x0, y0, _ = self.head_history[0]
-        x1, y1, _ = self.head_history[-1]
-
-        dx = x1 - x0
-        dy = y1 - y0
-
-        # Strong vertical movement = nod
+        x0, y0, _ = self._head_hist[0]
+        x1, y1, _ = self._head_hist[-1]
+        dx, dy = x1 - x0, y1 - y0
         if abs(dy) > 0.16 and abs(dy) > abs(dx) * 1.2:
-            self.head_history.clear()
+            self._head_hist.clear()
             return "head_nod"
-
-        # Strong horizontal movement = head swipe
         if abs(dx) > 0.18 and abs(dx) > abs(dy) * 1.2:
-            self.head_history.clear()
-
-            if dx > 0:
-                return "head_right"
-            return "head_left"
-
+            self._head_hist.clear()
+            return "head_right" if dx > 0 else "head_left"
         return None
 
-    # ------------------------------------------------------------------
-    # Eye gaze
-    # ------------------------------------------------------------------
-
-    def process_gaze(self, face, width, height):
-        """
-        Estimate gaze from iris position relative to the eye corners.
-        This is deliberately conservative and intended as a prototype.
-        """
+    # ── gaze processing ────────────────────────────────────────────────────────
+    def _process_gaze(self, face, w, h):
         lm = face.landmark
-
-        # MediaPipe Face Mesh iris landmarks:
-        # left iris approx 468-472, right iris approx 473-477.
         if len(lm) < 478:
             return
+        def _ratio(v, a, b):
+            span = b - a
+            return (v - a) / span if abs(span) > 0.0001 else 0.5
 
-        left_iris = lm[468]
-        right_iris = lm[473]
+        li, ri = lm[468], lm[473]
+        gx = max(0.0, min(1.0, (_ratio(li.x, lm[33].x, lm[133].x) +
+                                 _ratio(ri.x, lm[362].x, lm[263].x)) / 2))
+        gy = max(0.0, min(1.0, (_ratio(li.y, lm[159].y, lm[145].y) +
+                                 _ratio(ri.y, lm[386].y, lm[374].y)) / 2))
 
-        # Approximate eye corners.
-        left_inner = lm[133]
-        left_outer = lm[33]
-        right_inner = lm[362]
-        right_outer = lm[263]
+        self._gaze_hist.append((gx, gy))
+        avg_x = sum(p[0] for p in self._gaze_hist) / len(self._gaze_hist)
+        avg_y = sum(p[1] for p in self._gaze_hist) / len(self._gaze_hist)
+        self._gaze_pt = (avg_x, avg_y)
 
-        left_ratio = self.normalized_position(
-            left_iris.x,
-            left_outer.x,
-            left_inner.x,
-        )
+        xs = [p[0] for p in self._gaze_hist]
+        ys = [p[1] for p in self._gaze_hist]
+        conf = max(0.2, min(0.98, 1.0 - (max(xs)-min(xs) + max(ys)-min(ys)) * 2.5))
 
-        right_ratio = self.normalized_position(
-            right_iris.x,
-            right_inner.x,
-            right_outer.x,
-        )
+        self.after(0, lambda x=avg_x, y=avg_y, c=conf: (
+            self._gaze_lbl.configure(text=f"Gaze: X={x:.2f} Y={y:.2f}"),
+            self._conf_lbl.configure(text=f"Confidence: {c:.0%}")))
 
-        gaze_x = max(
-            0.0,
-            min(
-                1.0,
-                (left_ratio + right_ratio) / 2,
-            ),
-        )
-
-        # Vertical estimate using upper/lower eyelid points.
-        left_top = lm[159]
-        left_bottom = lm[145]
-        right_top = lm[386]
-        right_bottom = lm[374]
-
-        left_y = self.normalized_position(
-            left_iris.y,
-            left_top.y,
-            left_bottom.y,
-        )
-
-        right_y = self.normalized_position(
-            right_iris.y,
-            right_top.y,
-            right_bottom.y,
-        )
-
-        gaze_y = max(
-            0.0,
-            min(
-                1.0,
-                (left_y + right_y) / 2,
-            ),
-        )
-
-        # Low-pass smoothing.
-        self.gaze_history.append(
-            (gaze_x, gaze_y)
-        )
-
-        avg_x = sum(p[0] for p in self.gaze_history) / len(
-            self.gaze_history
-        )
-        avg_y = sum(p[1] for p in self.gaze_history) / len(
-            self.gaze_history
-        )
-
-        self.gaze_point = (avg_x, avg_y)
-
-        confidence = self.calculate_gaze_confidence(
-            self.gaze_history
-        )
-
-        self.after(
-            0,
-            lambda c=confidence: self.confidence_var.set(
-                f"Confidence: {c:.0%}"
-            ),
-        )
-
-        self.after(
-            0,
-            lambda x=avg_x, y=avg_y: self.gaze_var.set(
-                f"Gaze: X={x:.2f}, Y={y:.2f}"
-            ),
-        )
-
-        # Dwell detection
         now = time.time()
+        if self._gaze_start is None:
+            self._gaze_start = now
+        if now - self._gaze_start >= GAZE_DWELL_SECS:
+            self._gaze_start = now + 999
+            threading.Thread(target=self._gaze_dwell,
+                             args=(avg_x, avg_y, conf), daemon=True).start()
 
-        if self.gaze_start is None:
-            self.gaze_start = now
+    def _gaze_dwell(self, x, y, conf):
+        q = f"Gaze dwell at {x:.2f}, {y:.2f} (confidence {conf:.0%}). Click here?"
+        self.after(0, lambda: self._confirm_banner.configure(text=q))
+        speak(q)
+        self._confirm_evt = threading.Event()
+        self._confirm_ans = None
+        answered = self._confirm_evt.wait(GAZE_CONFIRM_TOUT)
+        self.after(0, lambda: self._confirm_banner.configure(text=""))
+        if answered and self._confirm_ans is True and _GUI:
+            sw, sh = pyautogui.size()
+            pyautogui.click(int(x * sw), int(y * sh))
+            self._log("Gaze", "Clicked gaze location.", C["teal"])
+        self._gaze_start = None
 
-        if now - self.gaze_start >= GAZE_DWELL_SECONDS:
-            # Reset immediately so we don't repeatedly ask.
-            self.gaze_start = now + 999
-
-            threading.Thread(
-                target=self.handle_gaze_dwell,
-                args=(avg_x, avg_y, confidence),
-                daemon=True,
-            ).start()
-
-    @staticmethod
-    def normalized_position(value, start, end):
-        span = end - start
-
-        if abs(span) < 0.0001:
-            return 0.5
-
-        return (value - start) / span
-
-    @staticmethod
-    def calculate_gaze_confidence(history):
-        if len(history) < 3:
-            return 0.4
-
-        xs = [p[0] for p in history]
-        ys = [p[1] for p in history]
-
-        variance = (
-            max(xs) - min(xs)
-            + max(ys) - min(ys)
-        )
-
-        confidence = max(
-            0.2,
-            min(
-                0.98,
-                1.0 - variance * 2.5,
-            ),
-        )
-
-        return confidence
-
-    def handle_gaze_dwell(self, x, y, confidence):
-        """
-        Never click automatically after gaze dwell.
-        Ask the user first.
-        """
-        question = (
-            f"Is this what you were looking at? "
-            f"Gaze position {x:.2f}, {y:.2f}."
-        )
-
-        answer = self.ask_confirmation(question)
-
-        if answer is True:
-            if GUI_CONTROL_OK:
-                screen_w, screen_h = pyautogui.size()
-
-                screen_x = int(x * screen_w)
-                screen_y = int(y * screen_h)
-
-                pyautogui.click(
-                    screen_x,
-                    screen_y,
-                )
-
-            self.log_message(
-                "Gaze",
-                "Confirmed. Clicked the gaze location.",
-            )
-            TTS.say("Confirmed.")
-
-        elif answer is False:
-            self.log_message(
-                "Gaze",
-                "Gaze selection cancelled.",
-            )
-            TTS.say("Okay. I won't click.")
-
-        else:
-            self.log_message(
-                "Gaze",
-                "No confirmation received.",
-            )
-
-        self.gaze_start = None
-
-    # ------------------------------------------------------------------
-    # Gesture actions
-    # ------------------------------------------------------------------
-
-    def trigger_gesture(self, gesture):
+    # ── gesture actions ────────────────────────────────────────────────────────
+    def _trigger_gesture(self, gesture: str):
         now = time.time()
-        previous = self.last_gesture_time.get(
-            gesture,
-            0,
-        )
+        if now - self._last_gesture.get(gesture, 0) < GESTURE_COOLDOWN:
+            return
+        self._last_gesture[gesture] = now
+        self.after(0, lambda: self._gesture_lbl.configure(text=f"Gesture: {gesture}"))
 
-        if now - previous < GESTURE_COOLDOWN:
+        action_map = {
+            "fist":             {"action": "volume_down"},
+            "open_palm":        {"action": "volume_up"},
+            "hand_swipe_right": {"action": "new_tab"},
+            "hand_swipe_left":  {"action": "close_tab"},
+            "hand_wave_up":     {"action": "scroll_up"},
+            "hand_wave_down":   {"action": "scroll_down"},
+            "head_left":        {"action": "go_back"},
+            "head_right":       {"action": "switch_tab"},
+            "pinch":            {"action": "mouse_click"},
+            "head_nod":         {"action": "scroll_up"},
+        }
+
+        if gesture in ("thumbs_up", "head_nod"):
+            self._log("Gesture", f"{gesture} -> Confirm", C["purple"])
+            if self._confirm_evt:
+                self._confirm_ans = True
+                self._confirm_evt.set()
             return
 
-        self.last_gesture_time[gesture] = now
-
-        self.gesture_var.set(
-            f"Gesture: {gesture}"
-        )
-
-        if gesture == "fist":
-            press("volumedown")
-            self.log_message(
-                "Gesture",
-                "✊ Fist → Volume down",
-            )
-            TTS.say("Volume down.")
-
-        elif gesture == "open_palm":
-            press("volumeup")
-            self.log_message(
-                "Gesture",
-                "✋ Open palm → Volume up",
-            )
-            TTS.say("Volume up.")
-
-        elif gesture == "hand_swipe_right":
-            press("ctrl", "tab")
-            self.log_message(
-                "Gesture",
-                "Swipe right → Next tab",
-            )
-
-        elif gesture == "hand_swipe_left":
-            press("ctrl", "w")
-            self.log_message(
-                "Gesture",
-                "Swipe left → Close tab",
-            )
-
-        elif gesture == "hand_wave_up":
-            if GUI_CONTROL_OK:
-                pyautogui.scroll(5)
-            self.log_message(
-                "Gesture",
-                "Hand wave up → Scroll up",
-            )
-
-        elif gesture == "hand_wave_down":
-            if GUI_CONTROL_OK:
-                pyautogui.scroll(-5)
-            self.log_message(
-                "Gesture",
-                "Hand wave down → Scroll down",
-            )
-
-        elif gesture in ("thumbs_up", "head_nod"):
-            self.log_message(
-                "Gesture",
-                f"{gesture} → Confirm",
-            )
-            self.confirm_yes()
-            TTS.say("Confirmed.")
-
-        elif gesture in ("thumbs_down",):
-            self.log_message(
-                "Gesture",
-                "Thumbs down → Cancel",
-            )
-            self.confirm_no()
-            TTS.say("Cancelled.")
-
-        elif gesture == "head_left":
-            press("alt", "left")
-            self.log_message(
-                "Gesture",
-                "Head left → Back",
-            )
-
-        elif gesture == "head_right":
-            press("ctrl", "tab")
-            self.log_message(
-                "Gesture",
-                "Head right → Next",
-            )
-
-        elif gesture == "head_shake":
-            self.confirm_no()
-
-    # ------------------------------------------------------------------
-    # Shutdown
-    # ------------------------------------------------------------------
-
-    def shutdown(self):
-        if not self.running:
+        if gesture == "thumbs_down":
+            self._log("Gesture", "thumbs_down -> Cancel", C["purple"])
+            if self._confirm_evt:
+                self._confirm_ans = False
+                self._confirm_evt.set()
             return
 
-        self.running = False
-        self.camera_running = False
-        self.voice_running = False
+        data = action_map.get(gesture)
+        if not data:
+            return
+        data = _normalize_action(data)
+        result = execute(data, confirmed=True)
+        self._log("Gesture", f"{gesture} -> {result}", C["purple"])
 
-        try:
-            TTS.stop()
-        except Exception:
-            pass
-
+    # ── quit ───────────────────────────────────────────────────────────────────
+    def _quit(self):
+        self._running     = False
+        self._cam_active  = False
+        self._voice_active = False
+        if self._confirm_evt:
+            self._confirm_ans = False
+            self._confirm_evt.set()
         self.destroy()
 
 
-if __name__ == "__main__":
-    app = NeuroLia()
+def main():
+    app = NeuroLiaProto()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

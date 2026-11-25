@@ -38,9 +38,13 @@ POSE_ACTIONS = {
     ),
     "4": ({"action": "switch_tab"}, "Next tab"),
     "four": ({"action": "switch_tab"}, "Next tab"),
-    "rotate_clockwise": ({"action": "next_track"}, "Next track"),
+    "rotate_clockwise":    ({"action": "next_track"}, "Next track"),
     "rotate_anticlockwise": ({"action": "prev_track"}, "Previous track"),
+    "Heart":                ({"action": "cursor_toggle"}, "Cursor mode"),
 }
+
+YES_POSES = {"thumbsup", "Thumbs_UP"}
+NO_POSES  = {"thumbsdown", "thumbs_down"}
 
 REPEAT_ACTIONS = {"volume_up", "volume_down", "scroll_up", "scroll_down"}
 QUIET_ACTIONS = {"volume_up", "volume_down", "scroll_up", "scroll_down", "cancel"}

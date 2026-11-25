@@ -43,13 +43,24 @@ from lia_core import (
     needs_confirmation,
 )
 try:
-    from static_gestures import PoseRecognizer, POSE_ACTIONS, QUIET_ACTIONS
+    from static_gestures import PoseRecognizer, POSE_ACTIONS, QUIET_ACTIONS, YES_POSES, NO_POSES
     POSE_OK = True
 except Exception:
     POSE_OK = False
     PoseRecognizer = None
     POSE_ACTIONS = {}
     QUIET_ACTIONS = set()
+    YES_POSES = set()
+    NO_POSES  = set()
+
+try:
+    from cursor_control import CursorController, PyAutoGuiMouse, apply_events
+    CURSOR_OK = True
+except Exception:
+    CURSOR_OK = False
+    CursorController = None
+    PyAutoGuiMouse   = None
+    def apply_events(events, mouse): return events
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.12
@@ -635,6 +646,18 @@ def execute(data: dict, *, confirmed: bool = False) -> str:
             pyautogui.screenshot().save("screenshot.png")
             return "Screenshot saved as screenshot.png."
 
+        elif action == "mouse_click":
+            pyautogui.click()
+            return "Clicked."
+
+        elif action == "double_click":
+            pyautogui.doubleClick()
+            return "Double-clicked."
+
+        elif action == "right_click":
+            pyautogui.rightClick()
+            return "Right-clicked."
+
         elif action == "cancel":
             stop_speaking()
             return "Stopped."
@@ -904,6 +927,8 @@ class LiaApp(ctk.CTk):
         self._wake_active = True
         self._confirmation_gate = ConfirmationGate()
         self._confirmation_lock = threading.Lock()
+        self._cursor = None
+        self._mouse  = None
         self._agent = None
         self._agent_busy = False
         self._agent_consent = False
@@ -1038,6 +1063,11 @@ class LiaApp(ctk.CTk):
         self.cam_status = ctk.CTkLabel(cam_hdr, text="● Starting",
                                         font=self._f(10), text_color=C["amber"])
         self.cam_status.pack(side="right")
+        self.cursor_var = tk.BooleanVar(value=False)
+        ctk.CTkSwitch(cam_hdr, text="Cursor mode", variable=self.cursor_var,
+                      command=self._on_cursor_switch,
+                      font=self._f(10), text_color=C["text"], width=40
+                      ).pack(side="right", padx=(0, 12))
 
         cam_wrap = ctk.CTkFrame(right, fg_color=C["card"],
                                 corner_radius=12, border_width=1,
@@ -1058,8 +1088,12 @@ class LiaApp(ctk.CTk):
         gi.pack(fill="x", padx=12, pady=10)
         ctk.CTkLabel(gi, text="GESTURES", font=self._f(10,"bold"),
                      text_color=C["dim"]).pack(anchor="w", pady=(0,6))
-        for g, a in [("✋ Swipe right","New tab"),("✋ Swipe left","Close tab"),
-                     ("↕ Head nod","Scroll up"),("↔ Head left","Scroll down")]:
+        for g, a in [("✋ Swipe right / left", "Next / previous tab"),
+                     ("↕ Head nod up / down", "Scroll"),
+                     ("👍 / 👎 held",          "Volume, or yes / no"),
+                     ("☝ Point · 🤏 Pinch",   "Cursor: move · click"),
+                     ("✌ Two fingers",         "Cursor: scroll"),
+                     ("🖐 Open palm",           "Stop / leave cursor")]:
             r = ctk.CTkFrame(gi, fg_color="transparent")
             r.pack(fill="x", pady=1)
             ctk.CTkLabel(r, text=g, font=self._f(10), text_color=C["dim"]).pack(side="left")
@@ -1401,6 +1435,10 @@ class LiaApp(ctk.CTk):
             elif action == "exit":
                 self.ui(self.after, 1500, self.destroy)
                 return
+            elif action in ("cursor_on", "cursor_off", "cursor_toggle"):
+                on = (action == "cursor_on" or
+                      (action == "cursor_toggle" and not (self._cursor and self._cursor.enabled)))
+                self.ui(self._set_cursor, on, False)
             elif action == "agent":
                 self._run_agent(data.get("task") or user_text, bool(data.get("explicit")))
             else:
@@ -1438,13 +1476,19 @@ class LiaApp(ctk.CTk):
         if _tts_q.empty() and not _speaking.is_set():
             speak(first_sentence(text))
 
+    def _thumbs_hint(self):
+        if self._cam_active and self._pose and self._pose.ready:
+            return " You can also show a thumbs up for yes, or a thumbs down for no."
+        return ""
+
     def _agent_log(self, text):
         self.ui(self._log, text, "info")
 
     def _agent_ask(self, question):
         self._answer_q = queue.Queue()
-        self.ui(self._msg, "lia", question)
-        speak(question)
+        hint = self._thumbs_hint()
+        self.ui(self._msg, "lia", question + hint)
+        speak(question + hint)
         t0 = time.time()
         while (_speaking.is_set() or not _tts_q.empty()) and time.time() - t0 < 30:
             time.sleep(0.1)
@@ -1466,6 +1510,9 @@ class LiaApp(ctk.CTk):
         if self._agent is None:
             self._agent = LiaAgent(say=self._agent_say, ask=self._agent_ask, log=self._agent_log)
         self._agent_busy = True
+        if self._cursor and self._cursor.enabled:
+            apply_events(self._cursor.pause(), self._mouse)
+            self.ui(self.cam_status.configure, text="● Cursor paused", text_color=C["amber"])
         final = ""
         try:
             if not self._agent_consent:
@@ -1486,6 +1533,9 @@ class LiaApp(ctk.CTk):
         finally:
             self._agent_busy = False
             self._answer_q = None
+            if self._cursor and self._cursor.enabled:
+                self._cursor.resume()
+                self.ui(self.cam_status.configure, text="● Cursor mode", text_color=C["amber"])
         self.ui(self._msg, "lia", final)
         speak(final)
         self.ui(self._set_state, "idle", "Standing by", "Say 'Lia' then your command")
@@ -1511,80 +1561,168 @@ class LiaApp(ctk.CTk):
         speak(msg)
 
     # ── CAMERA ─────────────────────────────────────────────────────────────────
+    GESTURE_ACTIONS = {
+        "hand_swipe_right": ({"action": "switch_tab"},  "Next tab"),
+        "hand_swipe_left":  ({"action": "go_back"},     "Previous tab"),
+        "head_nod_up":      ({"action": "scroll_up"},   "Scroll up"),
+        "head_nod_down":    ({"action": "scroll_down"}, "Scroll down"),
+    }
+
     def _start_camera(self):
         if not CAM_OK:
             self.cam_status.configure(text="● Not installed", text_color=C["coral"])
             return
         self._cam_active = True
-        self.cam_status.configure(text="● Live", text_color=C["teal"])
+        self._cam_frame  = None
         self._pose = PoseRecognizer() if POSE_OK else None
         if self._pose:
             threading.Thread(target=self._load_pose_model, daemon=True).start()
+        if CURSOR_OK:
+            try:
+                self._cursor = CursorController(
+                    tuple(pyautogui.size()),
+                    dwell=float(os.environ.get("LIA_CURSOR_DWELL", "0") or 0))
+                self._mouse = PyAutoGuiMouse()
+            except Exception as ex:
+                self._log(f"Cursor mode unavailable: {ex}", "error")
+        self.cam_status.configure(text="● Live", text_color=C["teal"])
         threading.Thread(target=self._cam_loop, daemon=True).start()
+        self.after(33, self._poll_cam)
 
     def _load_pose_model(self):
         ok, msg = self._pose.load()
-        self.after(0, lambda: self._log(msg, "success" if ok else "info"))
+        self.ui(self._log, msg, "success" if ok else "info")
 
     def _cam_loop(self):
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
-            self.after(0, lambda: self.cam_status.configure(
-                text="● No camera", text_color=C["coral"]))
+            self.ui(self.cam_status.configure, text="● No camera", text_color=C["coral"])
             return
 
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         mp_h  = mp.solutions.hands
         mp_fm = mp.solutions.face_mesh
         mp_d  = mp.solutions.drawing_utils
-        stabilizer = GestureStabilizer()
+        tracker = GestureTracker()
 
-        with mp_h.Hands(max_num_hands=1, min_detection_confidence=0.7) as hands, \
-             mp_fm.FaceMesh(max_num_faces=1, min_detection_confidence=0.7) as face:
-
+        with mp_h.Hands(max_num_hands=1, min_detection_confidence=0.6,
+                        min_tracking_confidence=0.5) as hands, \
+             mp_fm.FaceMesh(max_num_faces=1, min_detection_confidence=0.6,
+                            min_tracking_confidence=0.5) as face:
             while self._cam_active:
                 ok, frame = cap.read()
-                if not ok: break
-                frame = cv2.flip(frame,1)
-                rgb   = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                hr    = hands.process(rgb)
-                fr    = face.process(rgb)
-                hand_x = None
-                hand_landmarks = None
-                head_xy = None
+                if not ok:
+                    break
+                frame = cv2.flip(frame, 1)
+                h2, w2 = frame.shape[:2]
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                hr  = hands.process(rgb)
+                fr  = face.process(rgb)
+                now = time.time()
+                gesture    = None
+                cur        = self._cursor
+                cursor_on  = bool(cur and cur.active)
 
                 if hr.multi_hand_landmarks:
-                    for hl in hr.multi_hand_landmarks:
-                        mp_d.draw_landmarks(frame, hl, mp_h.HAND_CONNECTIONS,
-                            mp_d.DrawingSpec(color=(140,100,255),thickness=2),
-                            mp_d.DrawingSpec(color=(200,170,255),thickness=1))
-                        hand_x = hl.landmark[0].x
-                        hand_landmarks = hl.landmark
-
-                if fr.multi_face_landmarks:
-                    for fl in fr.multi_face_landmarks:
-                        nose = fl.landmark[1]
-                        head_xy = (nose.x, nose.y)
-
-                det = stabilizer.update(hand_x=hand_x, head_xy=head_xy)
-                if self._pose:
-                    if hand_landmarks is None:
+                    hl = hr.multi_hand_landmarks[0]
+                    mp_d.draw_landmarks(frame, hl, mp_h.HAND_CONNECTIONS,
+                        mp_d.DrawingSpec(color=(140, 100, 255), thickness=2),
+                        mp_d.DrawingSpec(color=(200, 170, 255), thickness=1))
+                    if cursor_on:
+                        self._apply_cursor(cur.update(hl.landmark, now, w2 / h2))
+                    else:
+                        gesture = tracker.hand(hl.landmark[0].x, now)
+                        if gesture is None and self._pose and self._pose.ready:
+                            pose = self._pose.update(hl.landmark, now)
+                            if pose:
+                                gesture = "pose:" + pose
+                else:
+                    tracker.no_hand() if hasattr(tracker, "no_hand") else None
+                    if self._pose:
                         self._pose.lost()
-                    elif det is None and self._pose.ready:
-                        pose = self._pose.update(hand_landmarks)
-                        if pose:
-                            det = "pose:" + pose
-                if det:
-                    self.after(0, lambda g=det: self._gesture(g))
+                    if cur and cur.enabled:
+                        self._apply_cursor(cur.lost(now))
 
-                h2,w2 = frame.shape[:2]
+                if fr.multi_face_landmarks and not cursor_on:
+                    nose = fr.multi_face_landmarks[0].landmark[1]
+                    gesture = gesture or tracker.head(nose.x, nose.y, now)
+
+                if gesture:
+                    self.after(0, lambda g=gesture: self._gesture(g))
+
+                if cur and cur.enabled:
+                    self._draw_cursor_overlay(frame, cur)
+
                 tw = min(280, w2)
-                th = int(h2*tw/w2)
-                sm = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), (tw, th))
-                ctk_img = ctk.CTkImage(light_image=Image.fromarray(sm), size=(tw, th))
-                self.after(0, lambda p=ctk_img: self._show_cam(p))
-                time.sleep(0.033)
+                th = int(h2 * tw / w2)
+                small = cv2.resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), (tw, th))
+                self._cam_frame = Image.fromarray(small)
 
         cap.release()
+
+    def _draw_cursor_overlay(self, frame, cur):
+        h, w = frame.shape[:2]
+        x0, y0, x1, y1 = cur.box
+        colour = (0, 200, 255) if cur.active else (150, 150, 150)
+        cv2.rectangle(frame, (int(x0 * w), int(y0 * h)), (int(x1 * w), int(y1 * h)), colour, 2)
+        cv2.putText(frame, "CURSOR: " + cur.state, (8, 22),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2)
+
+    def _apply_cursor(self, events):
+        try:
+            rest = apply_events(events, self._mouse)
+        except Exception as ex:
+            self.ui(self._set_cursor, False, False, f"Cursor stopped: {ex}")
+            return
+        if ("exit",) in rest:
+            self.ui(self._set_cursor, False, True)
+
+    def _poll_cam(self):
+        img = self._cam_frame
+        if img is not None and self.cam_lbl.winfo_exists():
+            ph = ctk.CTkImage(light_image=img, size=(img.width, img.height))
+            self.cam_lbl.configure(image=ph, text="")
+            self.cam_lbl.image = ph
+            self._cam_frame = None
+        if self._cam_active:
+            self.after(33, self._poll_cam)
+
+    def _on_cursor_switch(self):
+        self._set_cursor(self.cursor_var.get(), True)
+
+    def _set_cursor(self, on, announce=True, note=None):
+        cur = self._cursor
+        if on:
+            if not (self._cam_active and cur):
+                msg = "Cursor mode needs the camera, and it isn't running."
+                self._log(msg, "error"); speak(msg)
+                self.cursor_var.set(False)
+                return
+            if self._agent_busy:
+                msg = "I'm busy with a task. Say stop first, then try again."
+                self._log(msg, "error"); speak(msg)
+                self.cursor_var.set(False)
+                return
+            cur.enable()
+            self.cursor_var.set(True)
+            self.cam_status.configure(text="● Cursor mode", text_color=C["amber"])
+            self._log("Cursor mode on: point to move, pinch to click, "
+                      "two fingers to scroll, open palm to stop", "success")
+            if announce:
+                speak("Cursor mode on. Point with your index finger and pinch to click. "
+                      "Show an open palm to stop.")
+        else:
+            if cur and self._mouse:
+                try:
+                    apply_events(cur.disable(), self._mouse)
+                except Exception:
+                    pass
+            self.cursor_var.set(False)
+            if self._cam_active:
+                self.cam_status.configure(text="● Live", text_color=C["teal"])
+            self._log(note or "Cursor mode off", "info")
+            if announce:
+                speak("Cursor mode off.")
 
     def _show_cam(self, photo):
         if self.cam_lbl.winfo_exists():
@@ -1592,29 +1730,36 @@ class LiaApp(ctk.CTk):
             self.cam_lbl.image = photo
 
     def _gesture(self, g):
-        if g.startswith("pose:"):
-            item, kind = POSE_ACTIONS.get(g[5:], None), "hand pose"
-        else:
-            gmap = {
-                "hand_swipe_right": ({"action": "new_tab"}, "New tab"),
-                "hand_swipe_left": ({"action": "close_tab"}, "Close tab"),
-                "head_nod_up": ({"action": "scroll_up"}, "Scroll up"),
-                "head_swipe_left": ({"action": "scroll_down"}, "Scroll down"),
-            }
-            item, kind = gmap.get(g), "gesture"
+        is_pose = g.startswith("pose:")
+        # thumbs answer agent yes/no questions silently
+        if is_pose and self._answer_q is not None:
+            pose_name = g[5:]
+            if pose_name in YES_POSES:
+                self._log("Thumbs up: yes", "success")
+                self._answer_q.put("yes")
+                return
+            if pose_name in NO_POSES:
+                self._log("Thumbs down: no", "success")
+                self._answer_q.put("no")
+                return
+        item, kind = (
+            (POSE_ACTIONS.get(g[5:]), "hand pose") if is_pose
+            else (self.GESTURE_ACTIONS.get(g), "gesture")
+        )
         if not item:
             return
         data, label = item
         data = _normalize_action(data)
         if self._agent_busy and data["action"] != "cancel":
             return
+        if data["action"] in ("cursor_on", "cursor_off", "cursor_toggle"):
+            self._set_cursor(not (self._cursor and self._cursor.enabled), True)
+            return
         if data["action"] == "cancel":
-            try:
-                stop_speaking()
-            except Exception as ex:
-                self._log(f"Could not stop speech: {ex}", "error")
-                return
-            self._log(f"{label} — {kind}", "info")
+            stop_speaking()
+            if self._agent_busy and self._agent:
+                self._agent.cancel()
+            self._log(f"{label} -- {kind}", "info")
             return
         if not is_allowed(data):
             self._log("Gesture action is not allowed.", "error")
@@ -1627,7 +1772,7 @@ class LiaApp(ctk.CTk):
             return
         result = execute(data)
         self._log(
-            f"{label} — {kind}",
+            f"{label} -- {kind}",
             "error" if is_failure(result) else "success",
         )
         if data["action"] not in QUIET_ACTIONS:
@@ -1637,6 +1782,11 @@ class LiaApp(ctk.CTk):
     def _quit(self):
         self._cam_active  = False
         self._wake_active = False
+        if self._cursor and self._mouse:
+            try:
+                apply_events(self._cursor.disable(), self._mouse)
+            except Exception:
+                pass
         if self._agent:
             self._agent.cancel()
         _tts_q.put(None)
